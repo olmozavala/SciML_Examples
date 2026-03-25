@@ -456,6 +456,7 @@ def update_plots(n_intervals, clear_clicks, noise_std, task):
                 mode="lines", name="Prediction",
                 line=dict(color="#7eb3ff", width=2),
             ))
+        _apply_dark_layout(pred_fig, "Spiral Trajectory", "x1", "x2", equal_aspect=True)
 
     elif task == "classifier":
         # Dynamic noise for classifier visualization
