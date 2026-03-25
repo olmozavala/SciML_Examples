@@ -570,7 +570,8 @@ def update_node_compare_plot(weights_path: str | None, task: str | None):
             ))
             ep = meta.get("epochs", "?")
             loss = meta.get("final_loss", 0)
-            _apply_dark_layout(fig, f"Spiral — {solver}  |  ep={ep}  loss={loss:.4f}", "x1", "x2", equal_aspect=True)
+            fname = Path(weights_path).name
+            _apply_dark_layout(fig, f"Spiral: {fname} | ep={ep} loss={loss:.4f}", "x1", "x2", equal_aspect=True)
 
         elif task == "classifier":
             model = NeuralODEClassifier(in_dim=2, hidden_dim=16, num_classes=1, method=solver).to(device)
@@ -590,7 +591,8 @@ def update_node_compare_plot(weights_path: str | None, task: str | None):
             ))
             ep = meta.get("epochs", "?")
             loss = meta.get("final_loss", 0)
-            _apply_dark_layout(fig, f"Classifier — {solver}  |  ep={ep}  loss={loss:.4f}", "x1", "x2", equal_aspect=True)
+            fname = Path(weights_path).name
+            _apply_dark_layout(fig, f"Classifier: {fname} | ep={ep} loss={loss:.4f}", "x1", "x2", equal_aspect=True)
 
     except Exception as e:
         fig = _empty_fig(f"Error loading model: {e}")
