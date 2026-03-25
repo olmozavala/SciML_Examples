@@ -1,24 +1,25 @@
-/* Global CSS fixes for Slider tooltips in Dark Mode */
-.rc-slider-tooltip-inner {
-    background-color: #1e2842 !important;
-    color: #e8eaf0 !important;
-    border: 1px solid #3d4b7a !important;
-    padding: 4px 8px !important;
-    font-size: 11px !important;
+/* High-contrast fixes for Slider tooltips */
+.dash-slider-tooltip, .rc-slider-tooltip-inner {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #000000 !important;
+    padding: 2px 6px !important;
+    font-size: 12px !important;
+    font-weight: bold !important;
     border-radius: 4px !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+    opacity: 1.0 !important;
 }
 
-.rc-slider-tooltip-arrow {
-    border-top-color: #1e2842 !important;
-    border-bottom-color: #1e2842 !important;
+.rc-slider-tooltip-arrow, .dash-slider-tooltip-arrow {
+    border-top-color: #ffffff !important;
 }
 
-.rc-slider-mark-text {
-    color: #5577aa !important;
+/* Improve contrast for marks (0, 0.1, 0.2, etc) */
+.rc-slider-mark-text, .dash-slider-mark {
+    color: #c0d0f0 !important;
     font-size: 10px !important;
 }
 
 .rc-slider-mark-text-active {
-    color: #a0b4d8 !important;
+    color: #ffffff !important;
 }
