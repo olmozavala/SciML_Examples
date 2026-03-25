@@ -61,10 +61,10 @@ def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str,
         batch_time = 20      # standard segment length
         n_pts = len(t)
     elif task == "classifier":
-        X, y = get_concentric_circles()
+        X, y = get_concentric_circles(noise=noise_std)
         model = NeuralODEClassifier(in_dim=2, hidden_dim=16, num_classes=1, method=solver).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
         loss_fn = nn.BCEWithLogitsLoss()
     else:
         raise ValueError(f"Unknown task: {task}")

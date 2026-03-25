@@ -156,7 +156,7 @@ def create_method_tab(config: dict) -> dbc.Container:
         dcc.Store(id={"type": "task-select", "method": method_id}, data=config["task"]),
         dcc.Markdown(SPIRAL_EQUATION_LATEX if config["task"] == "spiral" else CLASSIFIER_EQUATION_LATEX, mathjax=True, style={"fontSize": "14px", "minHeight": "60px"}),
         
-        # New Noise Slider (only for spiral task)
+        # Noise Slider (always present to avoid MATCH callback errors)
         html.Div([
             html.Div("Data Noise", className="control-label mt-2"),
             dcc.Slider(
@@ -164,7 +164,7 @@ def create_method_tab(config: dict) -> dbc.Container:
                 marks={0: "0", 0.1: "0.1", 0.2: "0.2"},
                 tooltip={"placement": "bottom", "always_visible": True},
             ),
-        ] if config["task"] == "spiral" else [], id={"type": "noise-container", "method": method_id}),
+        ], id={"type": "noise-container", "method": method_id}),
         
         html.Hr(style={"borderColor": "#2a3555", "margin": "12px 0"}),
 
@@ -454,26 +454,30 @@ def update_plots(n_intervals, clear_clicks, noise_std, task):
                 mode="lines", name="Prediction",
                 line=dict(color="#7eb3ff", width=2),
             ))
-        _apply_dark_layout(pred_fig, "Spiral Trajectory", "x1", "x2")
-        
+
     elif task == "classifier":
-        X_np, y_np = _X_circles.cpu().numpy(), _y_circles.cpu().numpy()
+        # Dynamic noise for classifier visualization
+        noise_val = float(noise_std or 0.0)
+        # Note: we should ideally re-call get_concentric_circles here if we want perfectly interactive dots 
+        # but for simplicity we'll just show the pre-loaded ones or re-generate.
+        # Re-generating is actually fast enough for 1000 points.
+        X_torch, y_torch = get_concentric_circles(noise=noise_val)
+        X_np, y_np = X_torch.cpu().numpy(), y_torch.cpu().numpy()
         pred_y = data.get("pred_y")
 
-        # True labels plot
-        colors = ["#f59e0b" if label == 0 else "#7eb3ff" for label in y_np.flatten()]
-        
+        # Labels plot
         if pred_y:
             pred_y_np = np.array(pred_y).flatten()
             colors = ["#f59e0b" if prob < 0.0 else "#7eb3ff" for prob in pred_y_np]
-            title = "Predictions (Boundary at 0.0)"
+            title = f"Predictions (Boundary at 0.0, σ={noise_val})"
         else:
-            title = "True Labels (0 vs 1)"
+            colors = ["#f59e0b" if label == 0 else "#7eb3ff" for label in y_np.flatten()]
+            title = f"True Labels (0 vs 1, σ={noise_val})"
             
         pred_fig.add_trace(go.Scatter(
             x=X_np[:, 0], y=X_np[:, 1],
+            marker=dict(color=colors, size=6, opacity=0.8),
             mode="markers", name="Data",
-            marker=dict(color=colors, size=6, opacity=0.8)
         ))
         _apply_dark_layout(pred_fig, title, "x1", "x2")
 
