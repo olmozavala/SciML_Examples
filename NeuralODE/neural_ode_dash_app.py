@@ -126,7 +126,7 @@ def _plot_card(title: str, graph_id: dict) -> html.Div:
     return html.Div(
         [
             html.Div(title, className="plot-title"),
-            dcc.Graph(id=graph_id, config=_graph_config, style={"height": "280px"}),
+            dcc.Graph(id=graph_id, config=_graph_config, style={"height": "560px"}),
         ],
         className="plot-card mb-3",
     )
