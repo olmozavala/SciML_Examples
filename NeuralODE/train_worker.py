@@ -93,7 +93,7 @@ def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str)
 
     best_loss = float('inf')
     early_stop_counter = 0
-    patience = 10
+    patience = 20
 
     try:
         for epoch in range(epochs):
