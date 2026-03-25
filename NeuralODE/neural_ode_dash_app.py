@@ -164,6 +164,12 @@ def create_method_tab(config: dict) -> dbc.Container:
                 marks={0: "0", 0.1: "0.1", 0.2: "0.2"},
                 tooltip={"placement": "bottom", "always_visible": True},
             ),
+            html.Div("Batch Time (Segment Length)", className="control-label mt-2"),
+            dcc.Slider(
+                id={"type": "batch-time", "method": method_id}, min=2, max=100, step=1, value=20,
+                marks={2: "2", 20: "20", 50: "50", 100: "100"},
+                tooltip={"placement": "bottom", "always_visible": True},
+            ),
         ], id={"type": "noise-container", "method": method_id}),
         
         html.Hr(style={"borderColor": "#2a3555", "margin": "12px 0"}),
@@ -328,8 +334,9 @@ app.layout = html.Div(
     State({"type": "lr", "method": MATCH}, "value"),
     State({"type": "solver-select", "method": MATCH}, "value"),
     State({"type": "noise-std", "method": MATCH}, "value"),
+    State({"type": "batch-time", "method": MATCH}, "value"),
 )
-def handle_train(n_clicks, clear_clicks, n_intervals, task, epochs, lr, solver, noise_std):
+def handle_train(n_clicks, clear_clicks, n_intervals, task, epochs, lr, solver, noise_std, batch_time):
     ctx = dash.callback_context
     if not ctx.triggered:
         return False, _status_badge("idle"), 0, False, True
@@ -344,10 +351,11 @@ def handle_train(n_clicks, clear_clicks, n_intervals, task, epochs, lr, solver, 
     if '"train-btn"' in ctx.triggered[0]["prop_id"] and n_clicks > 0:
         # Always restart: don't check existing status so stale files never block.
         noise_std = float(noise_std or 0.0)
+        batch_time = int(batch_time or 20)
         # Write 'training' BEFORE launching subprocess
         _write_loss_history({"status": "training", "history": [], "current_epoch": 0, "total_epochs": epochs}, method_id)
         subprocess.Popen(
-            [_PYTHON, _WORKER, method_id, task, str(epochs), str(lr), solver, str(noise_std)],
+            [_PYTHON, _WORKER, method_id, task, str(epochs), str(lr), solver, str(noise_std), str(batch_time)],
             close_fds=True,
         )
         return True, _status_badge("training"), 0, True, False
