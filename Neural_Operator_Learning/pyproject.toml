@@ -1,0 +1,12 @@
+[project]
+name = "neural-operator-learning"
+version = "0.1.0"
+description = "Simple DeepONet and FNO seminar examples"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0",
+    "numpy",
+    "dash>=2.14",
+    "dash-bootstrap-components",
+    "plotly>=5.0",
+]

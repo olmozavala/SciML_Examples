@@ -1,0 +1,114 @@
+body {
+    background-color: #0f1117 !important;
+    color: #e8eaf0 !important;
+    font-family: "Inter", "Segoe UI", sans-serif;
+}
+
+.operator-navbar {
+    background: linear-gradient(135deg, #1a1f35 0%, #0d1b2a 50%, #1a2744 100%);
+    border-bottom: 1px solid rgba(100, 160, 255, 0.2);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    padding: 0.85rem 1.5rem;
+}
+
+.operator-title {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #7eb3ff;
+    letter-spacing: 0.03em;
+}
+
+.operator-subtitle {
+    font-size: 0.8rem;
+    color: #8899bb;
+    margin-left: 0.85rem;
+}
+
+.nav-tabs {
+    border-bottom: 1px solid #2a3555;
+}
+
+.nav-tabs .nav-link {
+    color: #8899bb;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0.6rem 1.2rem;
+}
+
+.nav-tabs .nav-link.active {
+    color: #7eb3ff;
+    border-bottom: 2px solid #7eb3ff;
+    background: transparent;
+    font-weight: 600;
+}
+
+.operator-sidebar {
+    background: #141929 !important;
+    border: 1px solid #2a3555 !important;
+    border-radius: 10px;
+    height: 100%;
+}
+
+.section-header {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #5577aa;
+    font-weight: 600;
+    margin-bottom: 0.55rem;
+}
+
+.plot-card,
+.theory-card,
+.metrics-card {
+    background: #141929 !important;
+    border: 1px solid #2a3555 !important;
+    border-radius: 10px;
+}
+
+.plot-card {
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.plot-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #a0b4d8;
+    padding: 0.4rem 0.5rem 0;
+}
+
+.btn-train {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    border: none !important;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.btn-clear {
+    border-color: #3a4a70 !important;
+    color: #8899bb !important;
+}
+
+.control-label {
+    font-size: 0.78rem;
+    color: #8899bb;
+    margin-bottom: 0.25rem;
+}
+
+.status-panel,
+.gpu-note,
+.metric-line {
+    font-size: 0.8rem;
+    color: #a0b4d8;
+    margin-bottom: 0.35rem;
+}
+
+.form-control,
+.form-control:focus,
+input[type="number"] {
+    background-color: #1e2842 !important;
+    border-color: #2a3555 !important;
+    color: #e8eaf0 !important;
+}

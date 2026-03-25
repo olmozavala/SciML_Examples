@@ -1,0 +1,257 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   pinn.css  –  Dark theme for PINN Explorer (Dash 4 + dbc DARKLY)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Global reset ──────────────────────────────────────────────────── */
+body {
+    background-color: #0f1117 !important;
+    color: #e8eaf0 !important;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+/* ── 2. Navbar ────────────────────────────────────────────────────────── */
+.pinn-navbar {
+    background: linear-gradient(135deg, #1a1f35 0%, #0d1b2a 50%, #1a2744 100%);
+    border-bottom: 1px solid rgba(100, 160, 255, 0.2);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    padding: 0.75rem 1.5rem;
+}
+.pinn-title   { font-size: 1.5rem; font-weight: 700; color: #7eb3ff; letter-spacing: 0.03em; }
+.pinn-subtitle { font-size: 0.78rem; color: #8899bb; margin-left: 0.75rem; }
+
+/* ── 3. Bootstrap tabs override ───────────────────────────────────────── */
+.nav-tabs { border-bottom: 1px solid #2a3555; }
+.nav-tabs .nav-link {
+    color: #8899bb;
+    border: none;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 0.6rem 1.2rem;
+}
+.nav-tabs .nav-link.active {
+    color: #7eb3ff;
+    border-bottom: 2px solid #7eb3ff;
+    background: transparent;
+    font-weight: 600;
+}
+.nav-tabs .nav-link:hover:not(.active) {
+    color: #c0d0f0;
+    border-bottom: 2px solid #3a4a70;
+}
+
+/* ── 4. Cards / Sidebar ───────────────────────────────────────────────── */
+.pinn-sidebar {
+    background: #141929 !important;
+    border: 1px solid #2a3555 !important;
+    border-radius: 10px;
+}
+.section-header {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #5577aa;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+/* ── 5. Plot cards ────────────────────────────────────────────────────── */
+.plot-card {
+    background: #141929 !important;
+    border: 1px solid #2a3555 !important;
+    border-radius: 10px;
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+}
+.plot-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #a0b4d8;
+    padding: 0.4rem 0.5rem 0;
+}
+
+/* ── 6. Buttons ───────────────────────────────────────────────────────── */
+.btn-train {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    border: none !important;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    transition: all 0.2s;
+}
+.btn-train:hover {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    box-shadow: 0 0 18px rgba(59, 130, 246, 0.45);
+    transform: translateY(-1px);
+}
+.btn-clear {
+    border-color: #3a4a70 !important;
+    color: #8899bb !important;
+    transition: all 0.2s;
+}
+.btn-clear:hover { border-color: #7eb3ff !important; color: #7eb3ff !important; }
+
+/* ── 7. Status badge & progress bar ───────────────────────────────────── */
+.status-badge { font-size: 0.72rem; padding: 0.3rem 0.7rem; border-radius: 20px; }
+.progress    { background-color: #1e2842; height: 6px; border-radius: 3px; }
+
+/* ── 8. Control labels ────────────────────────────────────────────────── */
+.control-label { font-size: 0.78rem; color: #8899bb; margin-bottom: 0.25rem; }
+
+/* ── 9. Generic Bootstrap form overrides ──────────────────────────────── */
+/* Inputs, textareas, number-inputs that Bootstrap / DARKLY renders white */
+.form-control,
+.form-control:focus,
+input[type="number"],
+input[type="text"] {
+    background-color: #1e2842 !important;
+    border-color: #2a3555 !important;
+    color: #e8eaf0 !important;
+}
+.form-control:focus { box-shadow: 0 0 0 2px rgba(126, 179, 255, 0.25) !important; }
+
+/* ── 10. Dash 4  dcc.Dropdown ─────────────────────────────────────────────
+   Class names discovered from async-dropdown.js bundle:
+     .dash-dropdown              – outermost wrapper (has user className added here too)
+     .dash-dropdown-wrapper      – inner wrapper div
+     .dash-dropdown-content      – the closed-state control row
+     .dash-dropdown-trigger      – grid cell that holds value + trigger icon
+     .dash-dropdown-trigger-icon – the chevron ▾ SVG
+     .dash-dropdown-value        – selected label text
+     .dash-dropdown-value-item   – each label in multi-select
+     .dash-dropdown-placeholder  – placeholder text when nothing selected
+     .dash-dropdown-actions      – container for clear & action buttons
+     .dash-dropdown-clear        – the × clear button
+     .dash-dropdown-search-container / .dash-dropdown-search / .dash-dropdown-search-icon
+     .dash-dropdown-options      – the open floating menu
+     .dash-dropdown-option       – each option row in the open menu
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Outer wrapper & control surface */
+.dash-dropdown,
+.dash-dropdown-wrapper,
+.dash-dropdown-content {
+    background-color: #1e2842 !important;
+    border-radius: 4px !important;
+    color: #e8eaf0 !important;
+}
+.dash-dropdown {
+    border: 1px solid #2a3555 !important;
+}
+
+/* Value / placeholder text */
+.dash-dropdown-value,
+.dash-dropdown-value-item,
+.dash-dropdown-placeholder {
+    color: #e8eaf0 !important;
+    background-color: transparent !important;
+}
+.dash-dropdown-placeholder { color: #8899bb !important; }  /* dimmer for placeholder */
+
+/* Chevron arrow icon — make it visible */
+.dash-dropdown-trigger-icon {
+    color: #8899bb !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+.dash-dropdown-trigger-icon svg,
+.dash-dropdown-trigger-icon svg path,
+.dash-dropdown-trigger-icon svg polyline,
+.dash-dropdown-trigger-icon svg polygon {
+    stroke: #8899bb !important;
+    fill: #8899bb !important;
+    opacity: 1 !important;
+}
+
+/* Search icon & search input */
+.dash-dropdown-search-icon { color: #8899bb !important; }
+.dash-dropdown-search input,
+.dash-dropdown-search {
+    background-color: transparent !important;
+    color: #e8eaf0 !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Clear (×) button */
+.dash-dropdown-clear,
+.dash-dropdown-action-button {
+    color: #8899bb !important;
+    background: transparent !important;
+}
+.dash-dropdown-clear:hover,
+.dash-dropdown-action-button:hover { color: #7eb3ff !important; }
+
+/* Open options menu */
+.dash-dropdown-options {
+    background-color: #1a2236 !important;
+    border: 1px solid #2a3555 !important;
+    border-radius: 4px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+    z-index: 9999 !important;
+}
+
+/* Each option row */
+.dash-dropdown-option {
+    background-color: #1a2236 !important;
+    color: #e8eaf0 !important;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+.dash-dropdown-option:hover {
+    background-color: #2a3a60 !important;
+    color: #7eb3ff !important;
+}
+/* Selected / active option */
+.dash-dropdown-option[aria-selected="true"],
+.dash-dropdown-option.selected {
+    background-color: #1d3a70 !important;
+    color: #7eb3ff !important;
+    font-weight: 600;
+}
+
+/* Multi-select value count badge */
+.dash-dropdown-value-count {
+    background-color: #2563eb !important;
+    color: #fff !important;
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 0.75rem;
+}
+
+/* ── 11. Dash 4  dcc.Slider ───────────────────────────────────────────────
+   Class names discovered from async-slider.js bundle:
+     .dash-slider-root        – outermost container
+     .dash-slider-wrapper     – inner wrapper
+     .dash-slider-track       – the track bar
+     .dash-input-container    – the value input box (the white box beside/below the handle)
+     .dash-range-slider-input – min/max input for range sliders
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* The floating value input box (shows current value, e.g. "40") */
+.dash-input-container,
+.dash-input-container input,
+.dash-range-slider-input,
+.dash-range-slider-input input {
+    background-color: #1e2842 !important;
+    border: 1px solid #2a3555 !important;
+    border-radius: 4px !important;
+    color: #e8eaf0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+.dash-input-container input:focus,
+.dash-range-slider-input input:focus {
+    border-color: #7eb3ff !important;
+    box-shadow: 0 0 0 2px rgba(126, 179, 255, 0.2) !important;
+}
+
+/* Slider track: gradient fill */
+.dash-slider-track {
+    background: linear-gradient(90deg, #3a6fca, #7eb3ff) !important;
+}
+
+/* Slider root: make sure background is transparent */
+.dash-slider-root,
+.dash-slider-wrapper {
+    background-color: transparent !important;
+}

@@ -1,0 +1,19 @@
+/home/olmozavala/uv/envs/aieoas/lib/python3.10/site-packages/torch/autograd/graph.py:841: UserWarning:
+
+Attempting to run cuBLAS, but there was no current CUDA context! Attempting to set the primary context... (Triggered internally at /pytorch/aten/src/ATen/cuda/CublasHandlePool.cpp:270.)
+
+/home/olmozavala/Dropbox/TutorialsByMe/Sci_ML_Seminar/PINN/pinn_core.py:158: UserWarning:
+
+Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+
+Testing standard, curriculum, []
+SUCCESS in standard, curriculum, []
+Testing vpinn, standard, []
+SUCCESS in vpinn, standard, []
+Testing cpinn, standard, []
+SUCCESS in cpinn, standard, []
+Testing standard, standard, ['weights']
+SUCCESS in standard, standard, ['weights']
+Testing standard, standard, ['resampling']
+SUCCESS in standard, standard, ['resampling']

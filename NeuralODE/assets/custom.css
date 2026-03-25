@@ -1,0 +1,87 @@
+/* ── Dash Dropdown – dark theme fix ─────────────────────────────────────── */
+
+.dash-dropdown {
+    background-color: #1e2842 !important;
+    color: #e8eaf0 !important;
+    border: 1px solid #2a3555 !important;
+    border-radius: 6px !important;
+}
+
+/* The selected value displayed in the closed dropdown */
+.dash-dropdown .dash-dropdown-value-item,
+.dash-dropdown .Select-value,
+.dash-dropdown .Select-value-label {
+    color: #e8eaf0 !important;
+    background-color: #1e2842 !important;
+}
+
+/* The inner control area */
+.dash-dropdown .Select-control {
+    background-color: #1e2842 !important;
+    border: 1px solid #2a3555 !important;
+    border-radius: 6px !important;
+    color: #e8eaf0 !important;
+}
+
+/* Search / input text */
+.dash-dropdown .dash-dropdown-search,
+.dash-dropdown .Select-input > input {
+    color: #e8eaf0 !important;
+    background-color: #1e2842 !important;
+}
+
+/* Placeholder */
+.dash-dropdown .Select-placeholder {
+    color: #e8eaf0 !important;
+}
+
+/* Dropdown arrow */
+.dash-dropdown .Select-arrow {
+    border-top-color: #a0b4d8 !important;
+}
+
+/* Open menu */
+.dash-dropdown .Select-menu-outer {
+    background-color: #1e2842 !important;
+    border: 1px solid #2a3555 !important;
+    z-index: 9999 !important;
+}
+
+/* Option items in the list */
+.dash-dropdown-option,
+.dash-options-list-option,
+.dash-dropdown .Select-option {
+    background-color: #1e2842 !important;
+    color: #e8eaf0 !important;
+}
+
+/* Hover / focused option */
+.dash-dropdown .Select-option.is-focused,
+.dash-options-list-option:hover {
+    background-color: #2a3a60 !important;
+    color: #ffffff !important;
+}
+
+/* Selected option */
+.dash-dropdown .Select-option.is-selected {
+    background-color: #3a4e80 !important;
+    color: #ffffff !important;
+}
+
+/* ── Slider tooltip – dark theme fix ───────────────────────────────────── */
+
+.dash-slider-tooltip,
+.rc-slider-tooltip-inner {
+    background-color: #1e2842 !important;
+    color: #e8eaf0 !important;
+    border: 1px solid #2a3555 !important;
+    box-shadow: none !important;
+    font-size: 11px !important;
+    padding: 3px 8px !important;
+    border-radius: 4px !important;
+}
+
+.rc-slider-tooltip-arrow {
+    border-top-color: #1e2842 !important;
+    border-bottom-color: #1e2842 !important;
+}

@@ -1,0 +1,666 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{bm}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+\lstdefinestyle{scimlpython}{
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue!60!black},
+  commentstyle=\color{green!40!black},
+  stringstyle=\color{orange!60!black},
+  showstringspaces=false,
+  frame=single,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  captionpos=b
+}
+
+\newcommand{\sectionpipeline}[6]{%
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=4mm and 4mm,
+  box/.style={
+    draw,
+    rounded corners=3pt,
+    thick,
+    fill=blue!7,
+    minimum height=1.7cm,
+    text width=0.195\textwidth,
+    align=center,
+    inner sep=6pt
+  },
+  arrow/.style={-{Latex[length=2.5mm]}, thick, color=black!70}
+]
+\node[box] (a) {#2};
+\node[box, right=of a] (b) {#3};
+\node[box, right=of b] (c) {#4};
+\node[box, right=of c] (d) {#5};
+\draw[arrow] (a) -- (b);
+\draw[arrow] (b) -- (c);
+\draw[arrow] (c) -- (d);
+\end{tikzpicture}
+\caption{#1}
+\label{#6}
+\end{figure}
+}
+
+\title{A Technical Survey of Modern Scientific Machine Learning Methods}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section{Survey framing and a unifying viewpoint}
+
+Scientific Machine Learning (SciML) sits at the interface of \emph{mechanistic modeling} (e.g., PDE/ODE/SDE systems derived from conservation laws, constitutive relations, and symmetries) and \emph{statistical learning} (e.g., neural networks optimized from data). A useful unifying formulation is to view SciML methods as targeting one or more of the following maps: (i) \emph{state evolution} maps (time stepping / flows), (ii) \emph{solution operators} mapping problem data (coefficients, forcing, initial/boundary conditions, geometry) to solution fields, and (iii) \emph{inverse maps} from observations to unknown parameters, latent states, or even governing equations.
+
+A generic PDE-constrained learning problem can be posed as: find a function $u_\theta$ (often a neural network) such that
+\begin{equation}
+\mathcal{F}(u_\theta; \lambda) = 0 \quad \text{in } \Omega\times [0,T], \qquad 
+\mathcal{B}(u_\theta)=0 \quad \text{on } \partial\Omega\times[0,T],
+    \end{equation}
+    where $\mathcal{F}$ represents governing physics (possibly parameterized by $\lambda$), and $\mathcal{B}$ represents boundary/initial constraints. SciML methods differ primarily in (a) how $\mathcal{F}$ is enforced (soft vs.\ hard constraints; strong vs.\ weak form; discrete vs.\ continuous residuals), (b) what object is learned (a single-instance solution vs.\ an operator family), (c) what inductive biases are built in (symplecticity, invariants, equivariance, mesh/geometry awareness), and (d) how uncertainty/noise is modeled (Bayesian or probabilistic numerics vs.\ point estimates).
+
+    A second unifying lens is to separate SciML into (1) \emph{neural solvers} that learn a solution of a specific PDE/ODE instance (typical PINN-style), versus (2) \emph{neural operators/surrogates} that learn families of solutions across varying inputs (coefficients, IC/BC, geometry), amortizing the cost of solving. This dichotomy appears explicitly in multiple reviews comparing ``neural solvers'' and ``neural operators'' for parametric PDEs.
+
+    \sectionpipeline
+    {A unifying pipeline view of SciML.}
+    {\textbf{Problem setup}\\Coefficients, forcing, geometry, IC/BC, and observations}
+    {\textbf{Mechanistic structure}\\Governing operator $\mathcal{F}$ and constraints $\mathcal{B}$}
+    {\textbf{Learned target}\\State evolution, solution field, operator, or inverse map}
+    {\textbf{Scientific use}\\Prediction, inference, control, design, and UQ}
+    {fig:sciml-overview}
+
+    \section{Physics-informed learning}
+
+    \sectionpipeline
+    {Representative pipeline for physics-informed learning.}
+    {\textbf{Inputs}\\Sparse data, IC/BC, collocation points, and governing PDE}
+    {\textbf{Neural ansatz}\\A field approximation $u_\theta(x,t)$}
+    {\textbf{Training objective}\\Data loss plus residual, boundary, interface, or weak-form terms}
+    {\textbf{Output}\\A physics-consistent solution or inferred parameters}
+    {fig:pinn-pipeline}
+
+    \subsection{Canonical physics-informed neural networks}
+
+    Physics-Informed Neural Networks (PINNs) introduce a neural approximation $u_\theta(x,t)$ for an unknown state or field $u(x,t)$ and train it by minimizing a composite loss that combines data misfit with explicit penalties for violating the governing equations and constraints. Instead of fitting observations alone, the network is encouraged to produce a function that is physically admissible throughout the domain, including at locations where no measurements are available. In the canonical formulation, this is usually done in strong form:
+    \begin{equation}
+    \mathcal{L}(\theta)=
+    \lambda_{\text{data}}\!\!\sum_{(x_i,t_i)\in\mathcal{D}}\!\!\|u_\theta(x_i,t_i)-y_i\|^2
+    +\lambda_{r}\!\!\sum_{(x_j,t_j)\in\mathcal{C}}\!\!\|\mathcal{F}(u_\theta)(x_j,t_j)\|^2
+    +\lambda_{b}\!\!\sum_{(x_k,t_k)\in\partial\mathcal{C}}\!\!\|\mathcal{B}(u_\theta)(x_k,t_k)\|^2,
+    \end{equation}
+    Here $\mathcal{F}$ is the differential operator that encodes the governing physics, so $\mathcal{F}(u_\theta)$ is the PDE residual evaluated on the neural approximation. For example, in a heat equation one could have $\mathcal{F}(u)=u_t-\kappa \nabla^2 u-f$, while for other systems $\mathcal{F}$ would include the relevant advection, diffusion, reaction, source, or conservation terms. The set $\mathcal{C}$ contains collocation points in the interior of the domain where this residual is enforced, and automatic differentiation supplies the derivatives needed to compute $\mathcal{F}(u_\theta)$. The operator $\mathcal{B}$ plays the analogous role for boundary and initial conditions. This framework was popularized for forward and inverse PDE problems in a Journal of Computational Physics paper that remains a canonical reference.
+
+    This makes the PINN objective easy to interpret: the data term anchors the solution to observations, the residual term pushes the network toward satisfying the differential equation in the interior, and the boundary term enforces consistency with the problem setup. The broader ``physics-informed machine learning'' perspective emphasizes why this approach is attractive in science: the physics residual can act as an inductive bias when labeled data are scarce or noisy, and can support inverse problems by treating unknown coefficients/parameters as trainable variables. At the same time, practical limitations are widely reported: optimization difficulties (stiffness, loss imbalance), issues with sharp gradients or shocks, and the fact that standard PINNs do not inherently generalize across parametric families unless augmented with meta-learning, hypernetworks, or operator-learning components.
+
+\begin{lstlisting}[style=scimlpython,caption={Minimal PyTorch-style PINN sketch for Burgers or heat-type PDEs.},label={lst:pinn}]
+net = MLP(in_dim=2, out_dim=1)
+
+def grad(y, x):
+    return torch.autograd.grad(y, x, torch.ones_like(y), create_graph=True)[0]
+
+def residual(x, t, nu):
+    u = net(torch.cat([x, t], dim=1))
+    u_t = grad(u, t)
+    u_x = grad(u, x)
+    u_xx = grad(u_x, x)
+    return u_t + u * u_x - nu * u_xx
+
+loss = mse(net(X_data), y_data) + mse(residual(x_c, t_c, nu), 0.0) + bc_loss(net)
+\end{lstlisting}
+
+    \subsection{Variants: domain decomposition, variational/weak forms, adaptivity, conservation}
+
+    Multiple major PINN variants target known pain points.
+
+    \textbf{Conservative and domain-decomposition PINNs.} For conservation laws and large domains, domain-decomposition approaches split $\Omega$ into subdomains and enforce interface conditions (continuity and/or flux continuity) to improve trainability and parallelism. Extended PINNs (XPINNs) generalize earlier conservative/domain-decomposition ideas by combining PDE residuals within each subdomain and consistency constraints across interfaces, enabling space--time decomposition and improved scalability. A useful mental picture is a heat-conduction problem in a composite material: one subnetwork could model temperature in each material region, while interface losses enforce continuity of temperature and normal heat flux across the material boundaries.
+
+    A more specific example is the one-dimensional viscous Burgers equation
+    \begin{equation}
+    u_t + u u_x - \nu u_{xx} = 0, \qquad x\in[-1,1], \; t\in[0,T],
+    \end{equation}
+    where a steep front may develop in a localized region of space--time. Instead of training a single network over the entire cylinder $\Omega=[-1,1]\times[0,T]$, an XPINN-style construction might partition $\Omega$ into subdomains such as $\Omega_1=[-1,x_s]\times[0,T]$ and $\Omega_2=[x_s,1]\times[0,T]$, with $x_s$ chosen near the expected shock or sharp gradient, or into time slabs such as $[0,T_1]\times[-1,1]$ and $[T_1,T]\times[-1,1]$ if the dynamics become harder only after shock formation. One then introduces separate subnetworks $u_{\theta}^{(1)}$ and $u_{\theta}^{(2)}$, each with its own collocation set and residual loss, and couples them through interface constraints.
+
+    In that setting, the training objective is modified from one global PINN loss to a sum of local losses plus an interface penalty, schematically
+    \begin{equation}
+    \mathcal{L} = \sum_{m=1}^{M}\left(\lambda_r \mathcal{L}_{r}^{(m)} + \lambda_d \mathcal{L}_{d}^{(m)} + \lambda_b \mathcal{L}_{b}^{(m)}\right) + \lambda_I \mathcal{L}_{I},
+    \end{equation}
+    where $\mathcal{L}_{r}^{(m)}$ is the Burgers residual on subdomain $\Omega_m$ and $\mathcal{L}_{I}$ enforces agreement across interfaces. For viscous Burgers, a natural interface condition is continuity of both the state and diffusive flux, for example
+    \begin{equation}
+    \mathcal{L}_{I} = \sum_{(x,t)\in \Gamma_I} \left|u_{\theta}^{(1)}(x,t)-u_{\theta}^{(2)}(x,t)\right|^2
+    + \left|\nu \partial_x u_{\theta}^{(1)}(x,t)-\nu \partial_x u_{\theta}^{(2)}(x,t)\right|^2.
+    \end{equation}
+    This changes training in a practically important way: collocation points are now sampled separately in each $\Omega_m$, often with denser sampling near the interface or steep-gradient region; subnetworks can be optimized jointly or alternatingly; and the interface weight $\lambda_I$ becomes a new tuning parameter controlling how strongly the local solutions are stitched together. For inviscid or nearly discontinuous regimes, one may replace strict continuity with conservation-compatible jump conditions, so the decomposition is aligned with the physics of shock propagation rather than forcing an artificial smooth match.
+
+    \textbf{Variational PINNs (VPINNs) and hp-VPINNs.} A central issue for strong-form residual minimization is that it may behave poorly for higher-order operators, noisy derivatives, or limited smoothness. VPINNs replace strong-form residuals with weak-form (variational) residuals by testing against a function space:
+    \begin{equation}
+    \int_{\Omega} \mathcal{F}(u_\theta)\, v \, dx = 0 \quad \forall v \in \mathcal{V}_{\text{test}}.
+    \end{equation}
+    The basic idea is the same as in Galerkin finite elements: instead of requiring the PDE residual to be pointwise small everywhere, one only requires it to have small projection against a family of test functions. This can reduce derivative order requirements via integration by parts and can link the training objective to classical variational formulations.
+
+    A concrete example is the Euler--Bernoulli beam equation
+    \begin{equation}
+    EI\, w''''(x) = q(x), \qquad x\in(0,L),
+    \end{equation}
+    where $w(x)$ is the beam deflection, $EI$ is bending stiffness, and $q(x)$ is the distributed load. In strong form, a PINN would need the fourth derivative of the network output $w_\theta(x)$, which is often numerically delicate. In weak form, one multiplies by a test function $v(x)$ and integrates by parts twice, yielding
+    \begin{equation}
+    \int_0^L EI\, w''(x)\, v''(x)\, dx = \int_0^L q(x)\, v(x)\, dx
+    \qquad \forall v \in V_0,
+    \end{equation}
+    where $V_0$ is a test space satisfying the appropriate homogeneous boundary conditions. For a clamped beam, for example, one typically imposes $w(0)=w'(0)=w(L)=w'(L)=0$ on the trial function and chooses test functions vanishing in the corresponding sense at the boundaries.
+
+    In a VPINN, this leads to a loss built from finitely many test functions $\{v_j\}_{j=1}^{N_t}$:
+    \begin{equation}
+    \mathcal{L}_{\text{weak}}(\theta)=
+    \sum_{j=1}^{N_t}
+    \left|
+    \int_0^L EI\, w_\theta''(x)\, v_j''(x)\, dx
+    -
+    \int_0^L q(x)\, v_j(x)\, dx
+    \right|^2
+    + \lambda_b \mathcal{L}_{b}.
+    \end{equation}
+    Compared with a strong-form PINN, the training modification is therefore explicit: collocation residuals are replaced by quadrature-based weak residuals against selected test functions, and the network only needs to supply second derivatives rather than fourth derivatives. This is useful because it improves numerical stability for higher-order PDEs, accommodates solutions with limited smoothness more naturally, and ties the learning problem to well-understood finite-element intuition. hp-VPINNs further incorporate domain decomposition and high-order test spaces (hp-refinement concepts) to improve approximation properties and conditioning. In that setting, one might use smaller subdomains near a corner singularity in an elliptic problem and higher-order test functions in smoother regions away from that singularity.
+
+\begin{lstlisting}[style=scimlpython,caption={Schematic VPINN weak-residual assembly for a beam problem.},label={lst:vpinn}]
+def weak_residual(net, xq, wq, test_functions):
+    xq.requires_grad_(True)
+    w = net(xq)
+    w_x = grad(w, xq)
+    w_xx = grad(w_x, xq)
+    loss = 0.0
+    for v in test_functions:
+        lhs = torch.sum(wq * EI * w_xx * v.ddx(xq))
+        rhs = torch.sum(wq * q(xq) * v(xq))
+        loss = loss + (lhs - rhs) ** 2
+    return loss
+
+loss = weak_residual(net, x_quad, w_quad, test_space) + boundary_loss(net)
+\end{lstlisting}
+
+    \textbf{Adaptive PINNs and APINN-like families.} ``Adaptive PINN'' is an umbrella term covering (i) adaptive collocation sampling (e.g., residual-based adaptive refinement/distribution), (ii) adaptive loss weighting across terms, and (iii) adaptive architectures or curricula. A particularly influential line uses trainable per-point weights (self-adaptive PINNs) to address imbalance between residual and boundary/data terms by learning which points/terms deserve more emphasis during optimization. For example, in an advection--diffusion problem with a thin boundary layer, residual-based resampling would place many more collocation points near the steep layer than in the smooth bulk. Similarly, in a reaction--diffusion problem with moving interfaces, adaptive weights can focus optimization on regions where the solution changes rapidly instead of spending equal effort on already well-resolved parts of the domain.
+
+    \textbf{Exact or stronger conservation enforcement.} Beyond ``soft'' penalization of conservation laws, recent work proposes projection-based methods that map a candidate neural solution onto invariant manifolds (e.g., for ODEs with first integrals), yielding exactly conservative physics-informed neural solvers and physics-informed operator models. A simple example is a Hamiltonian oscillator or orbital mechanics problem where the learned state is projected so that total energy remains exactly constant, rather than merely approximately constant in the loss. More broadly, for systems with conserved mass, momentum, or other invariants, these approaches aim to guarantee the conservation law at the representation level instead of hoping that optimization weights make the violation small.
+
+    \subsection{Physics-guided and theory-guided neural networks}
+
+    Physics-informed learning is broader than PINNs. In \emph{physics-guided neural networks (PGNNs)}, the neural model is trained using a combination of (a) observational features, (b) outputs of a mechanistic simulator (possibly biased), and (c) physics-based loss terms that encode known constraints or relationships (e.g., monotonicity or density--temperature relationships in lakes). This is explicitly framed as blending simulator outputs with data-driven learning to improve generalization and physical consistency when labels are limited.
+
+    PGNNs can be viewed as an instantiation of the broader \emph{theory-guided data science} paradigm, which argues for incorporating scientific knowledge as constraints, priors, and structural design elements in learning pipelines. This line of work predates the PINN boom and is often positioned as ``learning with scientific consistency'' rather than ``solving PDEs with neural networks.''
+
+\section{Neural differential equations}
+
+\sectionpipeline
+{Representative pipeline for neural differential equations.}
+{\textbf{Inputs}\\Initial state, controls, and observed trajectories}
+{\textbf{Learned dynamics}\\Vector field or closure $f_\theta$ (and possibly $g_\theta$)}
+{\textbf{Differentiable solver}\\ODE, SDE, DDE, or CDE integration with sensitivities}
+{\textbf{Output}\\Trajectories, latent dynamics, forecasting, or system identification}
+{fig:nde-pipeline}
+
+Neural differential equations treat parts (or all) of the dynamics as learnable vector fields and train them through simulated trajectories and differentiable solvers. This family is particularly central when the scientific object is a dynamical system rather than a static PDE boundary value problem.
+
+\subsection{Neural ODEs: continuous-depth models and adjoint training}
+
+Neural ODEs parameterize the hidden-state dynamics by a neural network:
+\begin{equation}
+\frac{dh(t)}{dt} = f_\theta(h(t), t), \qquad h(0)=h_0,
+\end{equation}
+and compute outputs by integrating the ODE with a black-box solver. The foundational Neural ODE work emphasizes continuous-depth modeling, solver-adaptive computation, and backpropagation through ODE solutions via an adjoint sensitivity method.
+
+In SciML contexts, the key connection is that Neural ODEs convert learning time evolution into learning a vector field, which can be combined naturally with mechanistic terms (e.g., known linear operators plus learned nonlinear closures) and trained end-to-end when embedded in larger differentiable pipelines.
+
+A simple example, closely aligned with the original paper, is a continuous-depth classifier. One starts with an input $x$ such as an image or feature vector, uses an encoder network $g_\phi$ to map it to an initial hidden state,
+\begin{equation}
+h(0) = g_\phi(x),
+\end{equation}
+evolves that state through a continuous-depth block defined by the vector-field network $f_\theta(h,t)$, and then applies a readout network $r_\psi$ at the final time:
+\begin{equation}
+\hat y = r_\psi(h(T)).
+\end{equation}
+The inputs and outputs of the involved networks are therefore very clear: $g_\phi$ takes the raw data $x$ and outputs the initial latent state $h(0)$; $f_\theta$ takes the current latent state together with time $t$ and outputs the instantaneous derivative $dh/dt$; and $r_\psi$ takes the terminal latent state $h(T)$ and outputs logits, a regression target, or another prediction object.
+
+Training then follows a sequence that mirrors a standard residual network, except that the hidden layers are replaced by an ODE solve:
+\begin{enumerate}
+\item Compute the initial latent representation $h(0)=g_\phi(x)$ from the input batch.
+\item Solve the ODE $\dot h = f_\theta(h,t)$ from $t=0$ to $t=T$ with a numerical integrator to obtain $h(T)$.
+\item Apply the readout network $\hat y = r_\psi(h(T))$ and evaluate the task loss, such as cross-entropy for classification.
+\item Backpropagate through the ODE block using the adjoint sensitivity method (or direct differentiation through the solver) to obtain gradients with respect to $\phi$, $\theta$, and $\psi$.
+\item Update the encoder, vector-field, and readout parameters with stochastic gradient descent or a variant such as Adam.
+\end{enumerate}
+This example is useful pedagogically because it makes the ResNet connection explicit: instead of stacking finitely many residual blocks, one learns a continuous transformation in hidden space whose depth is determined by the integration interval and solver steps.
+
+Neural ODEs are especially beneficial when the underlying phenomenon is naturally continuous in time and observations are not collected on a fixed grid. Representative use cases include irregularly sampled clinical time series, latent dynamical-system identification from trajectories, and hybrid scientific models in which part of the right-hand side is known from physics while another part is learned from data. They are also attractive when one wants solver adaptivity: easy portions of the dynamics can be traversed with large time steps, while rapidly varying regions can trigger smaller steps automatically. More conceptually, they are useful when the modeling goal is not just prediction at a few discrete layers, but learning a continuous flow map that can be queried at arbitrary times, coupled to mechanistic ODE/PDE modules, or embedded inside differentiable simulation pipelines.
+
+That said, Neural ODEs are not automatically superior to standard residual networks. Their main advantages appear when continuous-time structure is genuinely part of the problem, when irregular observation times matter, or when one wants tight integration with scientific dynamical models. If the task is a conventional static supervised-learning problem with no meaningful temporal or physical interpretation, a standard discrete-depth architecture is often simpler and cheaper to train.
+
+\begin{lstlisting}[style=scimlpython,caption={Neural ODE classifier with encoder, continuous-depth block, and readout.},label={lst:neuralode}]
+encoder = EncoderNN()
+vector_field = VectorFieldNN()
+readout = ReadoutNN()
+
+def dynamics(t, h):
+    t_feature = t.expand(h.shape[0], 1)
+    return vector_field(torch.cat([h, t_feature], dim=1))
+
+h0 = encoder(x_batch)
+hT = odeint(dynamics, h0, torch.tensor([0.0, T]))[-1]
+logits = readout(hT)
+
+loss = cross_entropy(logits, y_batch)
+loss.backward()
+optimizer.step()
+\end{lstlisting}
+
+\subsection{Neural SDEs: stochastic dynamics and path distributions}
+
+Neural SDEs extend the vector field to include stochastic forcing:
+\begin{equation}
+dh(t) = f_\theta(h(t),t)\,dt + g_\theta(h(t),t)\,dW_t,
+\end{equation}
+where $W_t$ is a Wiener process. This provides a principled way to represent aleatoric uncertainty and unresolved-scale effects (e.g., turbulence closures) in continuous time, and has motivated both theoretical and algorithmic work---such as formulating neural SDEs in ways compatible with modern ML training and generative modeling.
+
+\subsection{Neural DDEs: memory, delay, and closure modeling}
+
+Delay differential equations incorporate explicit memory:
+\begin{equation}
+\frac{dh(t)}{dt} = f_\theta\big(h(t), h(t-\tau), t\big),
+\end{equation}
+and neural DDEs (NDDEs) have been proposed as continuous-depth models with delay, with training procedures derived using adjoint sensitivity methods adapted to delayed dynamics. This is conceptually aligned with scientific systems where delayed feedback or unmodeled memory effects are important (and it provides an appealing inductive bias for closure models).
+
+\subsection{Neural controlled differential equations}
+
+Neural controlled differential equations (neural CDEs) address a fundamental limitation of standard Neural ODE latent dynamics for irregularly sampled time series: an ODE trajectory is fixed by its initial condition and cannot respond to new observations without restarting or re-initializing. Neural CDEs use the mathematics of controlled differential equations to drive dynamics with an interpolated control path $X(t)$:
+\begin{equation}
+dz(t)= f_\theta(z(t))\,dX(t),
+\end{equation}
+allowing continuous-time models that can incorporate a control signal and use efficient adjoint methods.
+
+\subsection{Universal differential equations}
+
+Universal Differential Equations (UDEs) provide a systematic ``hybrid dynamical systems'' template by embedding universal approximators inside mechanistic differential equations. A canonical form is
+\begin{equation}
+\frac{dx}{dt} = f_{\text{known}}(x,t;\lambda) + f_\theta(x,t),
+\end{equation}
+or more generally replacing unknown constitutive terms, closures, or parameters with learnable functions while retaining the mechanistic backbone. The original UDE work positions this as a bridge between purely mechanistic modeling and purely data-driven learning, with applications spanning system identification, extrapolation, and acceleration.
+
+In SciML practice, UDEs act as a conceptual hub connecting: (i) neural ODE/SDE training toolchains (sensitivities, differentiable solvers), (ii) hybrid physics--ML closures (learn the missing physics), and (iii) inverse problems where mechanistic structure constrains otherwise ill-posed learning.
+
+\section{Neural operator learning}
+
+\sectionpipeline
+{Representative pipeline for neural operator learning.}
+{\textbf{Inputs}\\Functions describing coefficients, forcing, geometry, or IC/BC}
+{\textbf{Encoding}\\Branch nets, lifting layers, graph tokens, or sensor embeddings}
+{\textbf{Operator action}\\Learned map acting on function spaces across resolutions}
+{\textbf{Output}\\Fast prediction of solution fields for new problem instances}
+{fig:operator-pipeline}
+
+Neural operators shift the target from learning a single solution $u$ to learning an operator
+\begin{equation}
+\mathcal{G}:\; a \mapsto u,
+\end{equation}
+where $a$ could represent coefficients, forcing, geometry, or initial conditions, and $u$ is the corresponding solution field. A key motivation is amortization: once $\mathcal{G}$ is learned, inference can be orders of magnitude faster than a traditional solver for many-query tasks (UQ, inverse design, optimization), at the cost of up-front training on many simulated instances.
+
+\subsection{DeepONet}
+
+DeepONet operationalizes an operator approximation theorem perspective by using a \emph{branch network} to encode the input function $a$ sampled at sensor locations and a \emph{trunk network} to encode query points $x$. A common form is
+\begin{equation}
+\hat u(x) = \sum_{k=1}^p b_k(a)\, t_k(x),
+\end{equation}
+where $b(\cdot)$ is learned by the branch net and $t(\cdot)$ by the trunk net. The reason this becomes \emph{operator} learning rather than ordinary regression is that the input is itself a function and the output is also a function-valued object queried at arbitrary locations. The branch net summarizes ``which input function was provided,'' while the trunk net summarizes ``at which output coordinate should the operator be evaluated.'' Their dot product then approximates the operator evaluation at that coordinate.
+
+A canonical example, closely aligned with the original DeepONet presentation, is the antiderivative operator
+\begin{equation}
+\mathcal{G}(a)(y)=\int_0^y a(s)\,ds.
+\end{equation}
+Here the input is an entire function $a(s)$ on $[0,1]$, and the output is another function of $y$. In DeepONet, one does not feed the whole infinite-dimensional function directly; instead, one samples it at sensor points $\{x_i\}_{i=1}^m$ and gives the branch network the vector
+\begin{equation}
+\big(a(x_1),a(x_2),\dots,a(x_m)\big).
+\end{equation}
+The trunk network receives a query location $y$. The branch net then outputs coefficients $b_k(a)$ that depend on the \emph{entire input function as seen through its sensors}, and the trunk net outputs basis-like features $t_k(y)$ that depend on the query coordinate. Their combination approximates $\mathcal{G}(a)(y)$. Once trained, the same model can take a new function $a_{\mathrm{new}}$, encode it once through the branch net, and evaluate the antiderivative at many values of $y$ simply by changing the trunk input.
+
+This is precisely why the branch/trunk split is useful: it decouples information about the input function from information about where the output is evaluated. In effect, DeepONet learns a map from functions to functions, not just from vectors to scalars. Beyond antiderivatives, one can learn PDE solution operators. For example, in a Poisson problem
+\begin{equation}
+-u''(x)=f(x), \qquad x\in(0,1), \qquad u(0)=u(1)=0,
+\end{equation}
+the operator of interest is $\mathcal{G}: f \mapsto u$. The branch input would be sensor values of the forcing function $f$, while the trunk input would be the spatial coordinate $x$ where the solution is queried. After training on many pairs $(f,u)$, the network can approximate the entire solution field for a new forcing function without solving the PDE from scratch. Empirically, DeepONet is demonstrated on both explicit operators (e.g., integrals) and implicit operators arising from differential equations, including deterministic and stochastic cases.
+
+\begin{lstlisting}[style=scimlpython,caption={Representative DeepONet forward pass.},label={lst:deeponet}]
+branch = BranchNet()
+trunk = TrunkNet()
+
+def deeponet(a_sensor_values, x_query):
+    b = branch(a_sensor_values)      # function encoding
+    t = trunk(x_query)               # spatial query encoding
+    return torch.sum(b * t, dim=-1, keepdim=True)
+
+u_hat = deeponet(a_batch, x_batch)
+loss = mse(u_hat, u_true)
+\end{lstlisting}
+
+\subsection{Fourier neural operator and spectral operator learning}
+
+The Fourier Neural Operator (FNO) represents a major line of spectral neural operators. It uses iterative lifting and integral operator layers parameterized in Fourier space, typically:
+\begin{equation}
+v_{k+1} = \sigma\big( W v_k + \mathcal{F}^{-1}( R \cdot \mathcal{F}(v_k) ) \big),
+\end{equation}
+where $\mathcal{F}$ is the Fourier transform and $R$ is a learned spectral multiplier on truncated modes. FNO was originally demonstrated on canonical PDE benchmarks (Burgers, Darcy, Navier--Stokes), emphasizing discretization-invariant behavior across resolutions and strong empirical performance.
+
+A representative example is learning the Burgers solution operator that maps an initial condition $u_0(x)$ to the solution $u(x,T)$ at a later time $T$. In that setting, the network input is a discretized function on a uniform grid, and the output is another discretized function on the same or a different grid. The spectral convolution layer works by transforming the hidden representation into Fourier space, multiplying only a limited number of low-frequency modes by learned complex weights, and then transforming back to physical space. This is what makes the architecture ``operator-like'': it acts globally on the whole function rather than locally on a few neighboring grid points.
+
+\begin{lstlisting}[style=scimlpython,caption={Representative 1D Fourier neural operator sketch for a Burgers-type mapping.},label={lst:fno}]
+class SpectralConv1d(nn.Module):
+    def __init__(self, width, modes):
+        super().__init__()
+        self.modes = modes
+        self.weight = nn.Parameter(
+            torch.randn(width, width, modes, dtype=torch.cfloat)
+        )
+
+    def forward(self, x):
+        # x: [batch, width, n_grid]
+        x_ft = torch.fft.rfft(x, dim=-1)
+        out_ft = torch.zeros_like(x_ft)
+        out_ft[:, :, :self.modes] = torch.einsum(
+            "bim,iom->bom", x_ft[:, :, :self.modes], self.weight
+        )
+        return torch.fft.irfft(out_ft, n=x.size(-1), dim=-1)
+
+class FNO1d(nn.Module):
+    def __init__(self, modes, width):
+        super().__init__()
+        self.lift = nn.Linear(2, width)      # [u0(x), x] -> hidden channels
+        self.spec = SpectralConv1d(width, modes)
+        self.skip = nn.Conv1d(width, width, kernel_size=1)
+        self.proj = nn.Conv1d(width, 1, kernel_size=1)
+
+    def forward(self, u0, grid):
+        x = torch.stack([u0, grid], dim=-1)  # [batch, n_grid, 2]
+        x = self.lift(x).permute(0, 2, 1)    # [batch, width, n_grid]
+        x = torch.relu(self.spec(x) + self.skip(x))
+        return self.proj(x).squeeze(1)       # predicted u(x, T)
+
+model = FNO1d(modes=16, width=32)
+uT_hat = model(u0_batch, x_grid_batch)
+loss = mse(uT_hat, uT_batch)
+\end{lstlisting}
+
+Several follow-on works refine the spectral parameterizations (e.g., factorized variants) and study robustness/generalization, motivated by the observation that operator learning performance can degrade under distribution shifts in forcing/geometry or when extrapolating to harder regimes.
+
+\subsection{Graph neural operators, geometry-aware operators, and unstructured discretizations}
+
+A limitation of pure FFT-based FNO is its natural fit to uniform grids on rectangular domains. The graph kernel network (often discussed as a graph neural operator family) addresses discretization and mesh generality by computing kernel integrals via message passing on graphs, aiming for a single parameterization that transfers across discretizations (finite difference vs.\ finite element) and resolutions.
+
+A simple representative example is a diffusion or Poisson-type problem posed on an irregular mesh, such as heat conduction on a non-rectangular domain discretized by finite elements. In that setting, each node carries geometric information (coordinates), local input data such as forcing or boundary markers, and the target is the solution value at each node. A graph neural operator is useful because the mesh connectivity naturally defines which locations should exchange information. Rather than relying on FFTs on a regular grid, the model aggregates messages along edges, so the learned operator can map ``forcing on an irregular mesh'' to ``solution on that mesh'' while respecting local geometry and topology.
+
+\begin{lstlisting}[style=scimlpython,caption={Representative graph neural operator sketch on an irregular mesh.},label={lst:gno}]
+class GraphOperatorLayer(nn.Module):
+    def __init__(self, in_dim, out_dim):
+        super().__init__()
+        self.edge_mlp = MLP(in_dim * 2 + 2, out_dim)   # sender, receiver, geometry
+        self.node_mlp = MLP(in_dim + out_dim, out_dim)
+
+    def forward(self, x, pos, edge_index):
+        send, recv = edge_index
+        rel = pos[send] - pos[recv]
+        msg_in = torch.cat([x[send], x[recv], rel], dim=-1)
+        msg = self.edge_mlp(msg_in)
+
+        agg = torch.zeros(x.size(0), msg.size(-1), device=x.device)
+        agg.index_add_(0, recv, msg)
+        return self.node_mlp(torch.cat([x, agg], dim=-1))
+
+node_features = torch.cat([forcing, boundary_flag, coordinates], dim=-1)
+h = GraphOperatorLayer(in_dim=4, out_dim=64)(node_features, coordinates, edge_index)
+u_hat = nn.Linear(64, 1)(h)   # predicted nodal solution
+loss = mse(u_hat, u_true)
+\end{lstlisting}
+
+Geometry-aware extensions explicitly target irregular domains. Geo-FNO, for example, proposes learning a deformation of the physical domain into a latent uniform grid where FFT-based operations apply, restoring the computational efficiency of spectral layers while handling complex geometries and heterogeneous input formats (meshes, point clouds, shape parameters).
+
+A parallel transformer-based track defines neural operators using attention mechanisms that can naturally handle irregular meshes and multiple heterogeneous inputs. GNOT is a representative general neural operator transformer that introduces attention blocks designed for operator learning settings (irregular meshes, multiple source functions).
+
+\subsection{Wavelet and multiresolution neural operators}
+
+Wavelet Neural Operators (WNOs) and related multiwavelet approaches target multiscale structure by operating in wavelet bases rather than global Fourier modes, aiming to better capture localized features and discontinuities. Contemporary work continues along this axis, including wavelet-domain operator learning and generative operator models.
+
+A simple use case where wavelet operators make immediate sense is a PDE with localized sharp structure, for example a 1D coefficient-to-solution map in which the input coefficient field has abrupt jumps or the solution develops localized fronts. Fourier layers are global, so a local discontinuity can influence many modes; wavelet representations are often better aligned with such phenomena because they separate coarse-scale structure from localized detail coefficients. In operator-learning terms, the model can learn how low-frequency trends and high-frequency localized corrections should propagate from input functions to output functions.
+
+\begin{lstlisting}[style=scimlpython,caption={Representative wavelet neural operator sketch for localized multiscale signals.},label={lst:wno}]
+class WNO1d(nn.Module):
+    def __init__(self, width):
+        super().__init__()
+        self.low_mlp = MLP(width, width)
+        self.high_mlp = MLP(width, width)
+        self.proj_in = nn.Linear(2, width)    # [input field, x]
+        self.proj_out = nn.Linear(width, 1)
+
+    def forward(self, a, grid):
+        x = self.proj_in(torch.stack([a, grid], dim=-1))
+        low, highs = dwt1d(x)                 # coarse scale + detail coefficients
+        low = self.low_mlp(low)
+        highs = [self.high_mlp(h) for h in highs]
+        x = idwt1d(low, highs)
+        return self.proj_out(x).squeeze(-1)
+
+model = WNO1d(width=32)
+u_hat = model(coeff_field_batch, x_grid_batch)
+loss = mse(u_hat, u_true_batch)
+\end{lstlisting}
+
+\section{Structure-preserving physics networks}
+
+\sectionpipeline
+{Representative pipeline for structure-preserving physics networks.}
+{\textbf{Inputs}\\State variables in canonical or generalized coordinates}
+{\textbf{Structured model}\\Learn $H_\theta$, $L_\theta$, or a symplectic update map}
+{\textbf{Constrained dynamics}\\Induce evolution that respects invariants or geometry}
+{\textbf{Output}\\Long-horizon stable rollouts with improved physical fidelity}
+{fig:structure-pipeline}
+
+A distinct SciML paradigm builds inductive bias by encoding geometric structure and invariants directly into the architecture or training objective. This is particularly important for long-time stability in Hamiltonian/Lagrangian systems, turbulence closures, and dynamical systems where naive black-box models exhibit drift.
+
+\subsection{Hamiltonian neural networks}
+
+Hamiltonian mechanics posits a scalar Hamiltonian $H(q,p)$ with dynamics
+\begin{equation}
+\dot q = \frac{\partial H}{\partial p},\qquad
+\dot p = -\frac{\partial H}{\partial q}.
+\end{equation}
+Hamiltonian Neural Networks (HNNs) learn $H_\theta(q,p)$ and compute the vector field by differentiating $H_\theta$, ensuring that the predicted dynamics respect Hamiltonian structure by construction (and, in ideal settings, conserve energy). The original HNN paper frames this as learning conservation laws and invariances via Hamiltonian structure rather than expecting a generic network to rediscover them.
+
+\begin{lstlisting}[style=scimlpython,caption={Representative Hamiltonian neural network sketch.},label={lst:hnn}]
+H_net = HamiltonianNN()
+
+def hamiltonian_rhs(state):
+    q, p = state[:, :d], state[:, d:]
+    H = H_net(torch.cat([q, p], dim=1)).sum()
+    dH_dq, dH_dp = torch.autograd.grad(H, [q, p], create_graph=True)
+    return torch.cat([dH_dp, -dH_dq], dim=1)
+
+pred = odeint(lambda t, y: hamiltonian_rhs(y), y0, t_grid)
+loss = mse(pred, true_traj)
+\end{lstlisting}
+
+\subsection{Lagrangian neural networks}
+
+Lagrangian Neural Networks (LNNs) learn a Lagrangian $L_\theta(q,\dot q)$ and obtain equations of motion via the Euler--Lagrange equations:
+\begin{equation}
+\frac{d}{dt}\left(\frac{\partial L_\theta}{\partial \dot q}\right)-\frac{\partial L_\theta}{\partial q}=0.
+\end{equation}
+A key motivation is that LNNs do not require canonical momenta and may be preferable when canonical coordinates are unknown or inconvenient (including settings involving learned latent representations).
+
+\subsection{Symplectic networks and energy-preserving architectures}
+
+Symplectic neural networks aim to learn symplectic maps (structure-preserving time-$\Delta t$ updates) for Hamiltonian systems, preserving phase-space volume and providing improved long-term stability. SympNets propose intrinsic symplectic architectures for identifying Hamiltonian systems from data, reflecting a broader program of building networks whose layers are symplectomorphisms.
+
+Energy preservation also appears in closure modeling: for example, skew-symmetric architectural constraints can enforce stability and preserve conservation laws in learned turbulence closures (motivated by the fragility of unconstrained closures).
+
+\subsection{Mesh- and graph-structured dynamics with physical constraints}
+
+Structure preservation increasingly intersects with mesh-aware modeling through graph networks that enforce physical symmetries or conservation at the interaction level (e.g., pairwise momentum conservation). Recent work explicitly constructs physics-informed graph neural architectures that enforce conservation laws in node interactions, reflecting a convergence of geometric deep learning and classical structure-preserving modeling.
+
+\section{Scientific surrogate modeling and reduced-order methods}
+
+\sectionpipeline
+{Representative pipeline for surrogate modeling and reduced-order methods.}
+{\textbf{Inputs}\\High-fidelity simulations or snapshot ensembles}
+{\textbf{Compression}\\Projection basis or nonlinear latent manifold}
+{\textbf{Reduced evolution}\\Regression, latent dynamics, or reduced operators}
+{\textbf{Output}\\Fast many-query surrogates for UQ, control, and design}
+{fig:rom-pipeline}
+
+Surrogate modeling is the workhorse SciML strategy for accelerating repeated simulations, UQ, data assimilation, control, and inverse design, traditionally via reduced-order modeling (ROM) and, more recently, via learned latent models and neural operators.
+
+\subsection{Projection-based ROMs and reduced basis methods}
+
+Classical ROMs construct low-dimensional approximations using projection, often from snapshot data. A major survey of projection-based model reduction for parametric dynamical systems synthesizes approaches such as POD-Galerkin, balanced truncation variants, and interpolation of reduced models, emphasizing the offline--online decomposition central to many-query acceleration.
+
+Reduced basis methods extend this into certified and adaptive frameworks for time-dependent and parametric problems, including discussions of structure-preserving reduced models and localized/adaptive strategies for nonlinear solution manifolds.
+
+\subsection{POD plus neural networks, autoencoders, and non-intrusive ROMs}
+
+A widely used hybrid recipe is POD + regression: compute POD modes from snapshots and learn a map from parameters/time to POD coefficients using neural networks. This yields non-intrusive ROMs (no modification of the original solver) and has been applied across many engineering domains.
+
+For strongly nonlinear or advective systems, nonlinear manifold learning via convolutional autoencoders plus learned latent dynamics (e.g., RNNs) has become prominent, motivated by the limitations of linear subspaces for shocks, transport, or multiscale fields. Representative work demonstrates CAE-based compression followed by reduced-space temporal evolution to reproduce challenging dynamics (e.g., Burgers shocks, shallow water).
+
+A recurring modern trend is to incorporate ``physics-informed'' ideas into ROM training---either by adding residual losses (possibly computed from discrete FEM residuals) or by constraining latent dynamics---bridging projection-based ROM traditions with PINN-like residual enforcement.
+
+\begin{lstlisting}[style=scimlpython,caption={Representative POD plus neural-regression ROM pipeline.},label={lst:podnn}]
+U, S, Vt = torch.linalg.svd(snapshot_matrix, full_matrices=False)
+Phi = U[:, :r]                                # POD basis
+coeffs = Phi.T @ snapshot_matrix
+
+rom_net = MLP(in_dim=param_dim + 1, out_dim=r)
+alpha_hat = rom_net(torch.cat([mu, t], dim=1))
+u_hat = Phi @ alpha_hat.T
+loss = mse(u_hat.T, snapshot_targets)
+\end{lstlisting}
+
+\subsection{Dynamic mode decomposition and Koopman learning}
+
+Dynamic Mode Decomposition (DMD) provides a data-driven linear representation of dynamics, popular in fluid mechanics and beyond, originally framed as a method to extract dynamically relevant modes from numerical/experimental data.
+
+Koopman-based methods lift nonlinear dynamics into linear evolution on observables. Deep learning has been used to discover Koopman eigenfunctions/embeddings, aiming for universal linear embeddings with neural networks and providing interpretable intrinsic coordinates in some settings.
+
+While Koopman and DMD are related through linear operator viewpoints, modern SciML work explores how deep learning can stabilize and extend these approaches to higher-dimensional systems, control settings, and complex datasets.
+
+\section{Hybrid physics--ML models and equation discovery}
+
+\sectionpipeline
+{Representative pipeline for hybrid physics--ML modeling and equation discovery.}
+{\textbf{Inputs}\\Mechanistic solvers, simulation data, or observed trajectories}
+{\textbf{Learned component}\\Closures, constitutive terms, sparse libraries, or symbolic structure}
+{\textbf{Coupled loop}\\Differentiate through the solver or fit parsimonious dynamics}
+{\textbf{Output}\\Improved simulators or recovered governing equations}
+{fig:hybrid-pipeline}
+
+\subsection{Residual neural closures, neural parameterizations, and hybrid mechanistic--ML systems}
+
+Hybrid physics--ML models aim to retain trusted mechanistic structure while learning missing or approximate components (closures, sources, constitutive relations, parameterizations). This is a direct operationalization of the UDE philosophy and is common in turbulence modeling, climate parameterizations, and multiscale modeling.
+
+In turbulence, for example, learned closures must contend with stability and physical consistency; recent work explicitly recognizes instability as a core barrier and proposes constrained or energy-consistent closures.
+
+In climate and atmosphere, neural parameterizations and hybrid GCMs have been demonstrated at scale, including evidence that training on short-term forecasts can yield multi-year stable simulations capturing key climate phenomena.
+
+A complementary hybridization strategy places the solver ``in the loop'': differentiable PDE solvers embedded inside learning architectures allow training neural components end-to-end against downstream objectives, mitigating generalization failures common in purely black-box surrogates.
+
+\subsection{Sparse regression discovery: SINDy and PDE-FIND}
+
+Equation discovery treats governing laws as unknown and aims to identify parsimonious equations from data. SINDy frames discovery as sparse regression over a library of candidate nonlinear terms:
+\begin{equation}
+\dot x \approx \Theta(x)\,\xi,\qquad \text{with sparse } \xi,
+\end{equation}
+motivated by the assumption that only a few terms govern the dynamics among many possible candidates. This approach was popularized in the PNAS paper ``Discovering governing equations from data.''
+
+PDE-FIND extends this philosophy to PDEs by building candidate libraries involving spatial derivatives and using sparse regression to discover compact PDE forms from spatiotemporal data, positioned as a tool when first-principles derivations are intractable.
+
+\begin{lstlisting}[style=scimlpython,caption={Representative SINDy-style sparse regression workflow.},label={lst:sindy}]
+Theta = build_library(x_data, terms=["1", "x", "x^2", "sin(x)"])
+dxdt = finite_difference(x_data, dt)
+
+xi = torch.zeros(Theta.shape[1], 1, requires_grad=True)
+for _ in range(n_steps):
+    loss = mse(Theta @ xi, dxdt) + lam * torch.norm(xi, p=1)
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()
+\end{lstlisting}
+
+\subsection{Symbolic regression}
+
+Symbolic regression aims to recover closed-form expressions. Physics-inspired symbolic regression approaches emphasize exploiting structure (symmetry, separability, compositionality) to make an otherwise hard search tractable, with benchmark results on physics equation datasets.
+
+\subsection{Neural PDE discovery}
+
+Neural PDE discovery methods use neural architectures to learn both (i) differential operators and (ii) nonlinear response terms. PDE-Net is an influential example that constrains convolution filters to represent differential operators while learning nonlinearities, explicitly designed to both predict dynamics and uncover PDE structure.
+
+This family can be interpreted as a numeric--symbolic hybrid: the architecture encodes finite-difference-like operator structure while retaining neural flexibility, contrasting with purely sparse-regression libraries (SINDy/PDE-FIND) that rely heavily on candidate term design.
+
+\section{Stochastic and uncertainty-aware SciML}
+
+\sectionpipeline
+{Representative pipeline for stochastic and uncertainty-aware SciML.}
+{\textbf{Inputs}\\Noisy observations, uncertain parameters, and discretization error}
+{\textbf{Probabilistic model}\\Bayesian priors, stochastic dynamics, or probabilistic numerics}
+{\textbf{Inference engine}\\Posterior sampling, variational inference, or ensembles}
+{\textbf{Output}\\Predictions with calibrated uncertainty and risk information}
+{fig:uq-pipeline}
+
+Uncertainty-awareness is fundamental in science because data are noisy, models are approximations, and predictions often drive decisions (risk, design margins). SciML uncertainty arises from multiple sources: observation noise, parametric uncertainty, model discrepancy, and numerical/discretization error.
+
+\subsection{Bayesian PINNs and probabilistic operator learning}
+
+Bayesian PINNs place a Bayesian prior over network weights (or functions) and infer a posterior conditioned on data and physics constraints, enabling uncertainty quantification in forward and inverse PDE problems. A canonical formulation combines PINN residual constraints with Bayesian inference (e.g., HMC or variational inference) to quantify uncertainty induced by noisy observations.
+
+In operator learning, recent work proposes probabilistic neural operators that model distributions over output function spaces rather than point predictions, aligning operator learning with probabilistic forecasting objectives.
+
+\begin{lstlisting}[style=scimlpython,caption={Representative Bayesian PINN objective with variational parameters.},label={lst:bayespinn}]
+def elbo(sampled_weights):
+    u = bnn_forward(sampled_weights, X_all)
+    log_like = -data_misfit(u, y_obs) - physics_penalty(u, X_collocation)
+    log_prior = prior_logprob(sampled_weights)
+    log_q = variational_logprob(sampled_weights)
+    return log_like + log_prior - log_q
+
+loss = -torch.mean(torch.stack([elbo(sample_q()) for _ in range(S)]))
+loss.backward()
+optimizer.step()
+\end{lstlisting}
+
+\subsection{Deep BSDE methods for high-dimensional PDEs}
+
+High-dimensional PDEs (hundreds to thousands of dimensions) are notoriously difficult for mesh-based solvers. Deep BSDE methods leverage probabilistic representations of certain PDE classes (notably semilinear parabolic PDEs via backward stochastic differential equations) and parameterize components with deep networks trained by stochastic optimization. A PNAS paper on solving high-dimensional PDEs using deep learning is a key reference demonstrating practical algorithms in this direction.
+
+From a SciML taxonomy view, deep BSDE methods resemble neural solvers but differ from PINNs in that they exploit stochastic representations to mitigate curse-of-dimensionality effects in regimes where collocation-based PDE residual training becomes infeasible.
+
+\subsection{Gaussian-process PDE solvers and probabilistic numerics}
+
+Probabilistic numerics reframes numerical computation as inference, explicitly representing discretization and solver uncertainty. For PDEs, probabilistic numerical methods have been developed to propagate discretization uncertainty into downstream Bayesian inverse problems, using meshless constructions (often Gaussian-process-based) that produce conservative inferences when forward-solver error is non-negligible.
+
+Broader probabilistic numerics references position this as a general paradigm: numerical tasks (ODE/PDE solves, linear algebra) are treated as statistical inference problems, producing uncertainty quantification for computation itself rather than only for model parameters.
+
+\subsection{Cross-cutting challenges and emerging directions}
+
+Across paradigms, several recurring methodological issues appear in the literature.
+
+Optimization and stability remain central, especially for physics-informed residual training and learned closures, motivating adaptive weighting and structure-preserving constraints.
+
+Geometry and mesh generalization is a major driver of modern neural operators and mesh-based GNN simulators, with dedicated architectures for irregular grids and varying domains (graph neural operators, deformation-based Geo-FNO, transformer operators), as well as learning-based mesh simulation frameworks (MeshGraphNets, GNS).
+
+Finally, the field is converging toward hybrid stacks combining multiple ingredients---e.g., operator learning with physics-informed constraints for turbulence simulation, differentiable solvers coupled to learned components, and probabilistic treatments over operators or numerical error---suggesting that methodological families are increasingly best understood as composable modules rather than mutually exclusive categories.
+
+\end{document}
