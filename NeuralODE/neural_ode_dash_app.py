@@ -300,28 +300,6 @@ theory_tab = dbc.Container([
 
 app.layout = html.Div(
     [
-        # Global CSS fixes for Slider tooltips in Dark Mode
-        html.Style("""
-            .rc-slider-tooltip-inner {
-                background-color: #1e2842 !important;
-                color: #e8eaf0 !important;
-                border: 1px solid #3d4b7a !important;
-                padding: 4px 8px !important;
-                font-size: 11px !important;
-                border-radius: 4px !important;
-            }
-            .rc-slider-tooltip-arrow {
-                border-top-color: #1e2842 !important;
-                border-bottom-color: #1e2842 !important;
-            }
-            .rc-slider-mark-text {
-                color: #5577aa !important;
-                font-size: 10px !important;
-            }
-            .rc-slider-mark-text-active {
-                color: #a0b4d8 !important;
-            }
-        """),
         html.Div(dcc.Markdown("$$ $$", mathjax=True), style={"display": "none"}),
         html.Div(
             [
