@@ -412,11 +412,11 @@ def update_plots(n_intervals, clear_clicks, task):
             opacity=0.5
         ))
 
-        # Noisy Training Points (sampled for clarity)
+        # Noisy Training Data (sampled for clarity)
         pred_fig.add_trace(go.Scatter(
             x=true_y_noisy[::5, 0], y=true_y_noisy[::5, 1],
             mode="markers", name="Training Data (Noisy)",
-            marker=dict(color="#f59e0b", size=3, opacity=0.4),
+            marker=dict(color="#4ade80", size=3, opacity=0.8),
         ))
         
         if pred_y:
@@ -526,7 +526,7 @@ def update_node_compare_plot(weights_path: str | None, task: str | None):
             fig.add_trace(go.Scatter(
                 x=true_y_noisy[::5, 0], y=true_y_noisy[::5, 1],
                 mode="markers", name="Training Data (Noisy)",
-                marker=dict(color="#f59e0b", size=3, opacity=0.3),
+                marker=dict(color="#4ade80", size=3, opacity=0.8),
             ))
             fig.add_trace(go.Scatter(
                 x=pred[:, 0, 0], y=pred[:, 0, 1],
