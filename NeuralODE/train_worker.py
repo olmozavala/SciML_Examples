@@ -104,7 +104,9 @@ def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str,
                 s = torch.from_numpy(
                     np.random.choice(np.arange(n_pts - batch_time, dtype=np.int64), 50, replace=False)
                 ).to(device)
+                # Select the initial state for each segment in the batch
                 batch_y0 = true_y[s].squeeze(1)
+                # Define the relative time horizon [0, batch_time] for all segments
                 batch_t = t[:batch_time]
                 batch_true = torch.stack([true_y[s + i] for i in range(batch_time)], dim=0).squeeze(2)
                 pred_y = odeint(model.func, batch_y0, batch_t, method=model.method)
