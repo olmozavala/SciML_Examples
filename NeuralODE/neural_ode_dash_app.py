@@ -109,7 +109,9 @@ def _load_meta(pt_path: str) -> dict:
 
 
 # ── Pre-load training data once (avoid blocking Flask on every interval) ─────
-_t_spiral, _true_y_spiral = get_spiral_data()
+# We load clean for the 'clean' trajectory line and noisy for training markers
+_t_spiral, _true_y_spiral_clean = get_spiral_data(noise_std=0.0)
+_, _true_y_spiral = get_spiral_data(noise_std=0.05)
 _X_circles, _y_circles = get_concentric_circles()
 
 # ── Layout components ─────────────────────────────────────────────────────────
@@ -398,13 +400,23 @@ def update_plots(n_intervals, clear_clicks, task):
 
     pred_fig = _empty_fig()
     if task == "spiral":
-        true_y_np = _true_y_spiral.squeeze(1).cpu().numpy()
+        true_y_clean = _true_y_spiral_clean.squeeze(1).cpu().numpy()
+        true_y_noisy = _true_y_spiral.squeeze(1).cpu().numpy()
         pred_y = data.get("pred_y")
         
+        # Original clean trajectory (dashed)
         pred_fig.add_trace(go.Scatter(
-            x=true_y_np[:, 0], y=true_y_np[:, 1],
-            mode="lines", name="Target",
-            line=dict(color="#f59e0b", width=2, dash="dash"),
+            x=true_y_clean[:, 0], y=true_y_clean[:, 1],
+            mode="lines", name="Target (Clean)",
+            line=dict(color="#f59e0b", width=1, dash="dash"),
+            opacity=0.5
+        ))
+
+        # Noisy Training Points (sampled for clarity)
+        pred_fig.add_trace(go.Scatter(
+            x=true_y_noisy[::5, 0], y=true_y_noisy[::5, 1],
+            mode="markers", name="Training Data (Noisy)",
+            marker=dict(color="#f59e0b", size=3, opacity=0.4),
         ))
         
         if pred_y:
@@ -498,15 +510,23 @@ def update_node_compare_plot(weights_path: str | None, task: str | None):
             model.load_state_dict(torch.load(weights_path, map_location=device))
             model.eval()
 
-            true_y_np = _true_y_spiral.squeeze(1).cpu().numpy()
+            true_y_clean = _true_y_spiral_clean.squeeze(1).cpu().numpy()
+            true_y_noisy = _true_y_spiral.squeeze(1).cpu().numpy()
 
             with torch.no_grad():
-                pred = model(_true_y_spiral[0], _t_spiral).cpu().numpy()
+                # Predict starting from the clean initial point
+                pred = model(_true_y_spiral_clean[0], _t_spiral).cpu().numpy()
 
             fig.add_trace(go.Scatter(
-                x=true_y_np[:, 0], y=true_y_np[:, 1],
-                mode="lines", name="Target",
-                line=dict(color="#f59e0b", width=2, dash="dash"),
+                x=true_y_clean[:, 0], y=true_y_clean[:, 1],
+                mode="lines", name="Target (Clean)",
+                line=dict(color="#f59e0b", width=1, dash="dash"),
+                opacity=0.5
+            ))
+            fig.add_trace(go.Scatter(
+                x=true_y_noisy[::5, 0], y=true_y_noisy[::5, 1],
+                mode="markers", name="Training Data (Noisy)",
+                marker=dict(color="#f59e0b", size=3, opacity=0.3),
             ))
             fig.add_trace(go.Scatter(
                 x=pred[:, 0, 0], y=pred[:, 0, 1],

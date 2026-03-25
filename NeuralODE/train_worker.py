@@ -53,7 +53,7 @@ def _read(method_id: str) -> dict:
 # ── Training ──────────────────────────────────────────────────────────────────
 def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str) -> None:
     if task == "spiral":
-        t, true_y = get_spiral_data()
+        t, true_y = get_spiral_data(noise_std=0.05)
         model = NeuralODE(in_dim=2, num_hidden=64, method=solver).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)

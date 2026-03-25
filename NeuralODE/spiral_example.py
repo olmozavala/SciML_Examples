@@ -9,7 +9,7 @@ class SpiralDynamics(torch.nn.Module):
         true_A = torch.tensor([[-0.1, 2.0], [-2.0, -0.1]], device=y.device)
         return torch.mm(y, true_A)
 
-def get_spiral_data(n_points=1000, t_max=25.0):
+def get_spiral_data(n_points=1000, t_max=25.0, noise_std=0.0):
     """
     Generate a 2D spiral trajectory.
     Returns:
@@ -20,4 +20,6 @@ def get_spiral_data(n_points=1000, t_max=25.0):
     t = torch.linspace(0., t_max, n_points, device=device)
     with torch.no_grad():
         true_y = odeint(SpiralDynamics(), true_y0, t, method='dopri5')
+        if noise_std > 0:
+            true_y = true_y + torch.randn_like(true_y) * noise_std
     return t, true_y
