@@ -352,6 +352,8 @@ def handle_train(n_clicks, clear_clicks, n_intervals, task, epochs, lr, solver, 
 
     if '"train-btn"' in ctx.triggered[0]["prop_id"] and n_clicks > 0:
         # Always restart: don't check existing status so stale files never block.
+        epochs = int(epochs or 1000)
+        lr = float(lr or 0.01)
         noise_std = float(noise_std or 0.0)
         batch_time = int(batch_time or 20)
         # Write 'training' BEFORE launching subprocess
