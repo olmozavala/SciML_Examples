@@ -51,9 +51,9 @@ def _read(method_id: str) -> dict:
 
 
 # ── Training ──────────────────────────────────────────────────────────────────
-def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str) -> None:
+def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str, noise_std: float = 0.0) -> None:
     if task == "spiral":
-        t, true_y = get_spiral_data(noise_std=0.05)
+        t, true_y = get_spiral_data(noise_std=noise_std)
         model = NeuralODE(in_dim=2, num_hidden=64, method=solver).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
@@ -167,8 +167,8 @@ def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: train_worker.py <method_id> <task> <epochs> <lr> <solver>")
+    if len(sys.argv) < 7:
+        print("Usage: train_worker.py <method_id> <task> <epochs> <lr> <solver> <noise_std>")
         sys.exit(1)
-    _, method_id, task, epochs_s, lr_s, solver = sys.argv
-    run_training(method_id, task, int(epochs_s), float(lr_s), solver)
+    _, method_id, task, epochs_s, lr_s, solver, noise_s = sys.argv
+    run_training(method_id, task, int(epochs_s), float(lr_s), solver, float(noise_s))

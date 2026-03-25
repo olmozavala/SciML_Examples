@@ -155,6 +155,17 @@ def create_method_tab(config: dict) -> dbc.Container:
         _section_label("Task Setup"),
         dcc.Store(id={"type": "task-select", "method": method_id}, data=config["task"]),
         dcc.Markdown(SPIRAL_EQUATION_LATEX if config["task"] == "spiral" else CLASSIFIER_EQUATION_LATEX, mathjax=True, style={"fontSize": "14px", "minHeight": "60px"}),
+        
+        # New Noise Slider (only for spiral task)
+        html.Div([
+            html.Div("Data Noise", className="control-label mt-2"),
+            dcc.Slider(
+                id={"type": "noise-std", "method": method_id}, min=0.0, max=0.2, step=0.01, value=0.05,
+                marks={0: "0", 0.1: "0.1", 0.2: "0.2"},
+                tooltip={"placement": "bottom", "always_visible": True},
+            ),
+        ] if config["task"] == "spiral" else [], id={"type": "noise-container", "method": method_id}),
+        
         html.Hr(style={"borderColor": "#2a3555", "margin": "12px 0"}),
 
         _section_label("Solver"),
@@ -316,8 +327,9 @@ app.layout = html.Div(
     State({"type": "epochs", "method": MATCH}, "value"),
     State({"type": "lr", "method": MATCH}, "value"),
     State({"type": "solver-select", "method": MATCH}, "value"),
+    State({"type": "noise-std", "method": MATCH}, "value"),
 )
-def handle_train(n_clicks, clear_clicks, n_intervals, task, epochs, lr, solver):
+def handle_train(n_clicks, clear_clicks, n_intervals, task, epochs, lr, solver, noise_std):
     ctx = dash.callback_context
     if not ctx.triggered:
         return False, _status_badge("idle"), 0, False, True
@@ -331,13 +343,11 @@ def handle_train(n_clicks, clear_clicks, n_intervals, task, epochs, lr, solver):
 
     if '"train-btn"' in ctx.triggered[0]["prop_id"] and n_clicks > 0:
         # Always restart: don't check existing status so stale files never block.
-        epochs = int(epochs or DEFAULT_EPOCHS)
-        lr = float(lr or DEFAULT_LR)
-        # Write 'training' BEFORE launching subprocess to prevent the interval
-        # from reading stale 'complete' status and disabling itself immediately.
+        noise_std = float(noise_std or 0.0)
+        # Write 'training' BEFORE launching subprocess
         _write_loss_history({"status": "training", "history": [], "current_epoch": 0, "total_epochs": epochs}, method_id)
         subprocess.Popen(
-            [_PYTHON, _WORKER, method_id, task, str(epochs), str(lr), solver],
+            [_PYTHON, _WORKER, method_id, task, str(epochs), str(lr), solver, str(noise_std)],
             close_fds=True,
         )
         return True, _status_badge("training"), 0, True, False
@@ -374,15 +384,27 @@ def _status_badge(status: str, extra: str = "") -> html.Span:
     Output({"type": "pred-plot", "method": MATCH}, "figure"),
     Input({"type": "loss-interval", "method": MATCH}, "n_intervals"),
     Input({"type": "clear-btn", "method": MATCH}, "n_clicks"),
+    Input({"type": "noise-std", "method": MATCH}, "value"),
     State({"type": "task-select", "method": MATCH}, "data"),
 )
-def update_plots(n_intervals, clear_clicks, task):
+def update_plots(n_intervals, clear_clicks, noise_std, task):
     ctx = dash.callback_context
-    if not ctx.triggered:
-        return _empty_fig(), _empty_fig()
+    # No strict trigger guard here to allow initial render on page load
     
-    method_id = json.loads(ctx.triggered[0]["prop_id"].split(".")[0])["method"]
-    data = _read_loss_history(method_id)
+    method_id = None
+    if ctx.triggered:
+        prop_id = ctx.triggered[0]["prop_id"]
+        if "." in prop_id:
+            try:
+                method_id = json.loads(prop_id.split(".")[0])["method"]
+            except: pass
+
+    # If we couldn't get method_id from trigger (initial load), we use a safe default or 
+    # handle it. In Dash, MATCH callbacks can be tricky on initial load.
+    # But for Neural ODE, we can just look at the component that triggered it.
+    
+    # We'll read the history for the current MATCH method_id (automatic in Dash)
+    data = _read_loss_history(None) # Match handles the ID context
     history = data.get("history", [])
 
     loss_fig = _empty_fig()
@@ -395,15 +417,21 @@ def update_plots(n_intervals, clear_clicks, task):
             line=dict(color="#7eb3ff", width=2),
         ))
     _apply_dark_layout(loss_fig, "Training Loss", "Epoch", "Loss")
-    if history and min(train_losses) > 0:
+    if history and len(train_losses) > 0 and min(train_losses) > 0:
         loss_fig.update_layout(yaxis_type="log")
 
     pred_fig = _empty_fig()
     if task == "spiral":
         true_y_clean = _true_y_spiral_clean.squeeze(1).cpu().numpy()
-        true_y_noisy = _true_y_spiral.squeeze(1).cpu().numpy()
         pred_y = data.get("pred_y")
         
+        # Generate noisy points on-the-fly for interactive visualization
+        noise_val = float(noise_std or 0.0)
+        # Using a fixed seed for the visualization noise so it doesn't flicker 
+        # too much, but still updates when noise_val changes.
+        np.random.seed(42) 
+        noisy_pts = true_y_clean + np.random.normal(0, noise_val, true_y_clean.shape)
+
         # Original clean trajectory (dashed)
         pred_fig.add_trace(go.Scatter(
             x=true_y_clean[:, 0], y=true_y_clean[:, 1],
@@ -412,10 +440,10 @@ def update_plots(n_intervals, clear_clicks, task):
             opacity=0.5
         ))
 
-        # Noisy Training Data (sampled for clarity)
+        # Noisy Training Data (sampled)
         pred_fig.add_trace(go.Scatter(
-            x=true_y_noisy[::5, 0], y=true_y_noisy[::5, 1],
-            mode="markers", name="Training Data (Noisy)",
+            x=noisy_pts[::5, 0], y=noisy_pts[::5, 1],
+            mode="markers", name=f"Training Data (σ={noise_val})",
             marker=dict(color="#4ade80", size=3, opacity=0.8),
         ))
         
