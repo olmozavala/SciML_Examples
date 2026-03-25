@@ -51,7 +51,7 @@ def _read(method_id: str) -> dict:
 
 
 # ── Training ──────────────────────────────────────────────────────────────────
-def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str, noise_std: float = 0.0, batch_time: int = 20) -> None:
+def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str, noise_std: float = 0.0, batch_time: int = 20, batch_size: int = 50) -> None:
     if task == "spiral":
         t, true_y = get_spiral_data(noise_std=noise_std)
         model = NeuralODE(in_dim=2, num_hidden=64, method=solver).to(device)
@@ -103,7 +103,7 @@ def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str,
             optimizer.zero_grad()
             if task == "spiral":
                 s = torch.from_numpy(
-                    np.random.choice(np.arange(n_pts - batch_time, dtype=np.int64), 50, replace=False)
+                    np.random.choice(np.arange(n_pts - batch_time, dtype=np.int64), batch_size, replace=False)
                 ).to(device)
                 # Select the initial state for each segment in the batch
                 batch_y0 = true_y[s].squeeze(1)
@@ -170,8 +170,8 @@ def run_training(method_id: str, task: str, epochs: int, lr: float, solver: str,
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 8:
-        print("Usage: train_worker.py <method_id> <task> <epochs> <lr> <solver> <noise_std> <batch_time>")
+    if len(sys.argv) < 9:
+        print("Usage: train_worker.py <method_id> <task> <epochs> <lr> <solver> <noise_std> <batch_time> <batch_size>")
         sys.exit(1)
-    _, method_id, task, epochs_s, lr_s, solver, noise_s, batch_s = sys.argv
-    run_training(method_id, task, int(epochs_s), float(lr_s), solver, float(noise_s), int(batch_s))
+    _, method_id, task, epochs_s, lr_s, solver, noise_s, batch_s, b_size_s = sys.argv
+    run_training(method_id, task, int(epochs_s), float(lr_s), solver, float(noise_s), int(batch_s), int(b_size_s))

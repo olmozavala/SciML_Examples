@@ -172,6 +172,12 @@ def create_method_tab(config: dict) -> dbc.Container:
                 marks={2: "2", 20: "20", 50: "50", 100: "100"},
                 tooltip={"placement": "bottom", "always_visible": True},
             ),
+            html.Div("Batch Size", className="control-label mt-2"),
+            dcc.Slider(
+                id={"type": "batch-size", "method": method_id}, min=1, max=200, step=1, value=50,
+                marks={1: "1", 50: "50", 100: "100", 200: "200"},
+                tooltip={"placement": "bottom", "always_visible": True},
+            ),
         ], id={"type": "noise-container", "method": method_id}),
         
         html.Hr(style={"borderColor": "#2a3555", "margin": "12px 0"}),
@@ -200,7 +206,7 @@ def create_method_tab(config: dict) -> dbc.Container:
         ),
         html.Div("Learning Rate", className="control-label mt-2"),
         dcc.Input(
-            id={"type": "lr", "method": method_id}, type="number", value=config["lr"], step=0.001, min=0.0001,
+            id={"type": "lr", "method": method_id}, type="number", value=config["lr"], step=0.001, min=0,
             className="w-100", style={"background": "#1e2842", "border": "1px solid #2a3555", "color": "#e8eaf0", "borderRadius": "6px", "padding": "6px 10px", "marginBottom": "12px"},
         ),
         html.Hr(style={"borderColor": "#2a3555", "margin": "12px 0"}),
@@ -337,8 +343,9 @@ app.layout = html.Div(
     State({"type": "solver-select", "method": MATCH}, "value"),
     State({"type": "noise-std", "method": MATCH}, "value"),
     State({"type": "batch-time", "method": MATCH}, "value"),
+    State({"type": "batch-size", "method": MATCH}, "value"),
 )
-def handle_train(n_clicks, clear_clicks, n_intervals, task, epochs, lr, solver, noise_std, batch_time):
+def handle_train(n_clicks, clear_clicks, n_intervals, task, epochs, lr, solver, noise_std, batch_time, batch_size):
     ctx = dash.callback_context
     if not ctx.triggered:
         return False, _status_badge("idle"), 0, False, True
@@ -356,10 +363,13 @@ def handle_train(n_clicks, clear_clicks, n_intervals, task, epochs, lr, solver, 
         lr = float(lr or 0.01)
         noise_std = float(noise_std or 0.0)
         batch_time = int(batch_time or 20)
+        batch_size = int(batch_size or 50)
         # Write 'training' BEFORE launching subprocess
         _write_loss_history({"status": "training", "history": [], "current_epoch": 0, "total_epochs": epochs}, method_id)
+        cmd = [_PYTHON, _WORKER, method_id, task, str(epochs), str(lr), solver, str(noise_std), str(batch_time), str(batch_size)]
+        print(f"DEBUG: Launching worker with cmd: {cmd}")
         subprocess.Popen(
-            [_PYTHON, _WORKER, method_id, task, str(epochs), str(lr), solver, str(noise_std), str(batch_time)],
+            cmd,
             close_fds=True,
         )
         return True, _status_badge("training"), 0, True, False
