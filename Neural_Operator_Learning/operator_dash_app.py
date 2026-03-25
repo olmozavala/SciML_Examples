@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import shutil
 import threading
 from pathlib import Path
 
@@ -33,6 +34,8 @@ _history_lock = threading.Lock()
 _graph_config = {"responsive": True, "displayModeBar": False}
 DEEPNET_WEIGHTS_DIR = BASE_DIR / "weights" / "deeponet"
 DEEPNET_WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
+FNO_WEIGHTS_DIR = BASE_DIR / "weights" / "fno"
+FNO_WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 METHODS = [
@@ -41,7 +44,7 @@ METHODS = [
         "name": "DeepONet",
         "subtitle": "Branch/trunk architecture for operator queries",
         "description": "DeepONet learns an operator by combining a branch encoding of the input function with a trunk encoding of the query location x.",
-        "defaults": {"n_train": 128, "epochs": 250, "lr": 1e-3, "n_points": 64, "n_modes": 6},
+        "defaults": {"n_train": 128, "epochs": 400, "lr": 1e-3, "n_points": 64, "n_modes": 6},
         "equation": r"$$-u''(x)=f(x), \quad x\in(0,1), \quad u(0)=u(1)=0$$",
         "architecture": r"$$u_\theta(f)(x)=\sum_{k=1}^p b_k(f)\,t_k(x)+b_0$$",
     },
@@ -50,19 +53,19 @@ METHODS = [
         "name": "Fourier Neural Operator",
         "subtitle": "Global convolution in Fourier space",
         "description": "FNO updates feature maps on the full discretized function and mixes information globally through truncated Fourier modes.",
-        "defaults": {"n_train": 512, "epochs": 300, "lr": 1e-3, "n_points": 64, "n_modes": 6},
+        "defaults": {"n_train": 512, "epochs": 400, "lr": 1e-3, "n_points": 64, "n_modes": 6},
         "equation": r"$$-u''(x)=f(x), \quad x\in(0,1), \quad u(0)=u(1)=0$$",
         "architecture": r"$$v_{l+1}(x)=\sigma\left(Wv_l(x)+\mathcal{F}^{-1}(R_\phi\cdot\mathcal{F}(v_l))(x)\right)$$",
     },
 ]
 
 FORCING_PROFILES = [
-    ("mode1", "Single Mode: sin(pi x)"),
-    ("mode2", "Single Mode: sin(2pi x)"),
-    ("mixed_low", "Mixed Low Modes"),
-    ("mixed_high", "Mixed Higher Modes"),
-    ("random_11", "Random Profile (seed=11)"),
-    ("random_29", "Random Profile (seed=29)"),
+    ("mode1", "Additional: sin(pi x)"),
+    ("mode2", "Additional: sin(2pi x)"),
+    ("mixed_low", "Additional: mixed low modes"),
+    ("mixed_high", "Additional: mixed higher modes"),
+    ("random_101", "Additional random (seed=101)"),
+    ("random_202", "Additional random (seed=202)"),
 ]
 
 
@@ -97,10 +100,32 @@ def _create_deeponet_run_dir(config: dict) -> Path:
     return run_dir
 
 
+def _create_fno_run_dir(config: dict) -> Path:
+    """Create a timestamped run directory for FNO checkpoints."""
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_name = f"fno_{stamp}_n{config['n_train']}_p{config['n_points']}_m{config['n_modes']}"
+    run_dir = FNO_WEIGHTS_DIR / run_name
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
 def _save_deeponet_best(model: DeepONet, run_dir: Path, metadata: dict) -> tuple[str, str]:
     """Overwrite best checkpoint in a run directory and save metadata."""
     weights_path = run_dir / "best_model.pt"
     meta_path = run_dir / "best_model.json"
+    torch.save(model.state_dict(), weights_path)
+    payload = dict(metadata)
+    payload["weights_path"] = str(weights_path)
+    payload["metadata_path"] = str(meta_path)
+    with open(meta_path, "w") as stream:
+        json.dump(payload, stream, indent=2)
+    return str(weights_path), str(meta_path)
+
+
+def _save_fno_model(model: FNO1d, run_dir: Path, metadata: dict) -> tuple[str, str]:
+    """Save final FNO checkpoint and metadata."""
+    weights_path = run_dir / "final_model.pt"
+    meta_path = run_dir / "final_model.json"
     torch.save(model.state_dict(), weights_path)
     payload = dict(metadata)
     payload["weights_path"] = str(weights_path)
@@ -144,11 +169,11 @@ def _forcing_coefficients(profile: str, n_modes: int) -> np.ndarray:
         for idx, value in enumerate(base):
             if idx < n_modes:
                 coeffs[0, idx] = value
-    elif profile == "random_11":
-        rng = np.random.default_rng(11)
+    elif profile == "random_101":
+        rng = np.random.default_rng(101)
         coeffs = rng.normal(0.0, 1.0 / (np.arange(1, n_modes + 1) ** 2), size=(1, n_modes)).astype(np.float32)
-    elif profile == "random_29":
-        rng = np.random.default_rng(29)
+    elif profile == "random_202":
+        rng = np.random.default_rng(202)
         coeffs = rng.normal(0.0, 1.0 / (np.arange(1, n_modes + 1) ** 2), size=(1, n_modes)).astype(np.float32)
     else:
         coeffs[0, 0] = 1.0
@@ -162,6 +187,24 @@ def _build_evaluation_case(profile: str, n_points: int, n_modes: int) -> dict:
     forcing = evaluate_sine_series(coeffs, x)[0]
     target = solve_poisson_from_coeffs(coeffs, x)[0]
     return {"x": x.tolist(), "forcing": forcing.tolist(), "target": target.tolist()}
+
+
+@torch.no_grad()
+def _predict_deeponet_single(model: DeepONet, forcing: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    """Predict one full field for one forcing profile."""
+    model.eval()
+    n_points = x.shape[0]
+    forcing_batch = forcing.reshape(1, -1).repeat(n_points, 1)
+    x_query = x.reshape(-1, 1)
+    return model(forcing_batch, x_query).squeeze(-1)
+
+
+@torch.no_grad()
+def _predict_fno_single(model: FNO1d, forcing: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    """Predict one full field for one forcing profile with FNO."""
+    model.eval()
+    features = torch.stack([forcing, x], dim=-1).unsqueeze(0)
+    return model(features).squeeze(0)
 
 
 def _empty_fig(title: str, yaxis_title: str) -> go.Figure:
@@ -212,6 +255,63 @@ def _forcing_fig(data: dict | None) -> go.Figure:
     return fig
 
 
+def _forcing_overlay_fig(data: dict | None, highlight_idx: int | None = None) -> go.Figure:
+    """Plot all training forcings and highlight one selected sample."""
+    fig = _empty_fig("Training Forcings (All Samples)", "f(x)")
+    if not data:
+        return fig
+
+    x_vals = data["x"]
+    forcings = data["forcings"]
+    n_samples = len(forcings)
+    if n_samples == 0:
+        return fig
+
+    max_traces = min(n_samples, 200)
+    step = max(1, n_samples // max_traces)
+    for idx in range(0, n_samples, step):
+        fig.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=forcings[idx],
+                mode="lines",
+                line=dict(color="rgba(126,179,255,0.30)", width=1),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+
+    if highlight_idx is not None and 0 <= highlight_idx < n_samples:
+        fig.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=forcings[highlight_idx],
+                mode="lines",
+                line=dict(color="#f59e0b", width=3),
+                name=f"Sample {highlight_idx}",
+            )
+        )
+    return fig
+
+
+def _training_points_fig(x_values: list[float] | None) -> go.Figure:
+    """Plot 1D sensor locations used for training."""
+    fig = _empty_fig("Training Point Locations", "index")
+    if x_values:
+        y_vals = list(range(len(x_values)))
+        fig.add_trace(
+            go.Scatter(
+                x=x_values,
+                y=y_vals,
+                mode="markers",
+                marker=dict(size=8, color="#22c55e", opacity=0.85),
+                name="training points",
+            )
+        )
+        fig.update_yaxes(showticklabels=False)
+    return fig
+
+
 def _solution_fig(data: dict | None) -> go.Figure:
     fig = _empty_fig("Solution Comparison", "u(x)")
     if data:
@@ -224,21 +324,22 @@ def _solution_fig(data: dict | None) -> go.Figure:
                 name="Target",
             )
         )
-        fig.add_trace(
-            go.Scatter(
-                x=data["x"],
-                y=data["prediction"],
-                mode="lines",
-                line=dict(color="#7eb3ff", width=3, dash="dash"),
-                name="Prediction",
+        if "prediction" in data and data["prediction"] is not None:
+            fig.add_trace(
+                go.Scatter(
+                    x=data["x"],
+                    y=data["prediction"],
+                    mode="lines",
+                    line=dict(color="#7eb3ff", width=3, dash="dash"),
+                    name="Prediction",
+                )
             )
-        )
     return fig
 
 
 def _error_fig(data: dict | None) -> go.Figure:
     fig = _empty_fig("Pointwise Error", "u_pred - u_true")
-    if data:
+    if data and "prediction" in data and data["prediction"] is not None:
         target = torch.tensor(data["target"])
         prediction = torch.tensor(data["prediction"])
         fig.add_trace(
@@ -328,6 +429,14 @@ def _sidebar(method: dict) -> html.Div:
                 marks={i: {"label": str(i), "style": {"color": "#5577aa", "fontSize": "10px"}} for i in [3, 5, 7, 10]},
                 tooltip={"placement": "bottom", "always_visible": True},
             ),
+            html.Div("Inspect Training Sample", className="control-label mt-3"),
+            dcc.Dropdown(
+                id={"type": "sample-select", "method": method_id},
+                options=[],
+                value=0,
+                clearable=False,
+                style={"marginBottom": "8px"},
+            ),
             html.Hr(style={"borderColor": "#2a3555", "margin": "12px 0"}),
             html.Div("Actions", className="section-header"),
             dbc.Row(
@@ -402,6 +511,11 @@ def _method_tab(method: dict) -> dbc.Container:
                                     dbc.Col(_plot_card("Pointwise Error", {"type": "error-plot", "method": method_id}), width=6),
                                 ]
                             ),
+                            dbc.Row(
+                                [
+                                    dbc.Col(_plot_card("Training Point Locations", {"type": "train-points-plot", "method": method_id}), width=12),
+                                ]
+                            ),
                             html.Div(id={"type": "metrics-card", "method": method_id}, className="metrics-card"),
                         ],
                         width=9,
@@ -439,6 +553,14 @@ def _deeponet_evaluation_tab() -> dbc.Container:
                                     color="secondary",
                                     outline=True,
                                     className="w-100",
+                                ),
+                                dbc.Button(
+                                    "Delete All Models",
+                                    id="eval-delete-models-btn",
+                                    n_clicks=0,
+                                    color="danger",
+                                    outline=True,
+                                    className="w-100 mt-2",
                                 ),
                                 html.Div(id="eval-model-status", className="status-panel mt-2"),
                                 html.Hr(style={"borderColor": "#2a3555", "margin": "12px 0"}),
@@ -587,6 +709,11 @@ app.layout = html.Div(
 
 def _train_worker(method_id: str, n_train: int, epochs: int, lr: float, n_points: int, n_modes: int) -> None:
     """Background training worker."""
+    print(
+        "[TRAIN_WORKER_START] "
+        f"method={method_id} n_train={n_train} epochs={epochs} lr={lr} n_points={n_points} n_modes={n_modes}",
+        flush=True,
+    )
     data = {
         "status": "training",
         "history": [],
@@ -616,26 +743,32 @@ def _train_worker(method_id: str, n_train: int, epochs: int, lr: float, n_points
             run_dir = _create_deeponet_run_dir(data["config"])
             best_val_mse = float("inf")
 
-            def on_epoch(epoch: int, train_loss: float) -> None:
-                nonlocal best_val_mse
+            def val_loss_fn() -> float:
                 val_prediction = predict_deeponet(model, val_data, device)
                 val_target = val_data["solution"].to(device)
-                val_metrics = summarize_prediction(val_prediction, val_target)
+                return float(summarize_prediction(val_prediction, val_target)["mse"])
+
+            def on_epoch(epoch: int, train_loss: float, val_loss: float | None, lr_now: float) -> None:
+                nonlocal best_val_mse
+                val_mse = float("inf") if val_loss is None else float(val_loss)
+                print(
+                    f"[DeepONet] epoch={epoch:4d} train_mse={train_loss:.3e} val_mse={val_mse:.3e} lr={lr_now:.3e}",
+                    flush=True,
+                )
 
                 payload = _read_history(method_id)
                 payload["history"].append(
-                    {"epoch": epoch, "train_loss": train_loss, "val_mse": val_metrics["mse"]}
+                    {"epoch": epoch, "train_loss": train_loss, "val_mse": val_mse, "lr": lr_now}
                 )
                 payload["current_epoch"] = epoch
 
-                if val_metrics["mse"] < best_val_mse:
-                    best_val_mse = val_metrics["mse"]
+                if val_mse < best_val_mse:
+                    best_val_mse = val_mse
                     metadata = {
                         "model_type": "deeponet",
                         "saved_at": datetime.now().isoformat(),
                         "best_epoch": epoch,
-                        "best_val_mse": val_metrics["mse"],
-                        "best_val_relative_l2": val_metrics["relative_l2"],
+                        "best_val_mse": val_mse,
                         "n_train": n_train,
                         "epochs": epochs,
                         "lr": lr,
@@ -657,16 +790,36 @@ def _train_worker(method_id: str, n_train: int, epochs: int, lr: float, n_points
                 epochs=epochs,
                 learning_rate=lr,
                 batch_size=1024,
-                log_interval=25,
+                log_interval=10,
                 callback=on_epoch,
+                val_loss_fn=val_loss_fn,
+                early_stopping_patience=30,
+                lr_scheduler_patience=10,
+                lr_scheduler_factor=0.5,
+                min_lr=1e-6,
             )
             prediction = predict_deeponet(model, test_data, device)
         else:
             model = FNO1d(input_dim=2, width=32, modes=min(12, max(4, n_points // 4)), depth=4).to(device)
+            val_data = make_dataset(n_samples=32, n_points=n_points, n_modes=n_modes, seed=23)
+            run_dir = _create_fno_run_dir(data["config"])
 
-            def on_epoch(epoch: int, loss: float) -> None:
+            def val_loss_fn() -> float:
+                val_prediction = predict_fno(model, val_data, device)
+                val_target = val_data["solution"].to(device)
+                return float(summarize_prediction(val_prediction, val_target)["mse"])
+
+            def on_epoch(epoch: int, train_loss: float, val_loss: float | None, lr_now: float) -> None:
+                val_mse = float("nan") if val_loss is None else float(val_loss)
+                print(
+                    f"[FNO]      epoch={epoch:4d} train_mse={train_loss:.3e} val_mse={val_mse:.3e} lr={lr_now:.3e}",
+                    flush=True,
+                )
                 payload = _read_history(method_id)
-                payload["history"].append({"epoch": epoch, "train_loss": loss})
+                row = {"epoch": epoch, "train_loss": train_loss, "lr": lr_now}
+                if val_loss is not None:
+                    row["val_mse"] = float(val_loss)
+                payload["history"].append(row)
                 payload["current_epoch"] = epoch
                 _write_history(method_id, payload)
 
@@ -677,9 +830,30 @@ def _train_worker(method_id: str, n_train: int, epochs: int, lr: float, n_points
                 epochs=epochs,
                 learning_rate=lr,
                 batch_size=32,
-                log_interval=25,
+                log_interval=10,
                 callback=on_epoch,
+                val_loss_fn=val_loss_fn,
+                early_stopping_patience=30,
+                lr_scheduler_patience=10,
+                lr_scheduler_factor=0.5,
+                min_lr=1e-6,
             )
+            fno_meta = {
+                "model_type": "fno",
+                "saved_at": datetime.now().isoformat(),
+                "n_train": n_train,
+                "epochs": epochs,
+                "lr": lr,
+                "n_points": n_points,
+                "n_modes": n_modes,
+                "device": str(device),
+                "run_dir": str(run_dir),
+            }
+            fno_weights, fno_meta_path = _save_fno_model(model, run_dir, fno_meta)
+            payload = _read_history(method_id)
+            payload["best_model_path"] = fno_weights
+            payload["best_metadata_path"] = fno_meta_path
+            _write_history(method_id, payload)
             prediction = predict_fno(model, test_data, device)
 
         target = test_data["solution"].to(device)
@@ -692,10 +866,12 @@ def _train_worker(method_id: str, n_train: int, epochs: int, lr: float, n_points
         }
 
         payload = _read_history(method_id)
+        final_epoch = int(payload.get("current_epoch", epochs))
         payload["status"] = "complete"
         payload["metrics"] = metrics
         payload["example"] = example
-        payload["current_epoch"] = epochs
+        payload["current_epoch"] = final_epoch
+        payload["stopped_early"] = final_epoch < epochs
         _write_history(method_id, payload)
     except Exception as exc:
         payload = _read_history(method_id)
@@ -738,6 +914,12 @@ def start_or_clear(
             path.unlink()
         return True, "Cleared previous results."
 
+    print(
+        "[TRAIN_REQUEST] "
+        f"method={method_id} n_train={n_train} epochs={epochs} lr={lr} n_points={n_points} n_modes={n_modes}",
+        flush=True,
+    )
+
     thread = threading.Thread(
         target=_train_worker,
         args=(method_id, int(n_train), int(epochs), float(lr), int(n_points), int(n_modes)),
@@ -754,19 +936,43 @@ def start_or_clear(
     Output({"type": "forcing-plot", "method": MATCH}, "figure"),
     Output({"type": "solution-plot", "method": MATCH}, "figure"),
     Output({"type": "error-plot", "method": MATCH}, "figure"),
+    Output({"type": "train-points-plot", "method": MATCH}, "figure"),
     Output({"type": "metrics-card", "method": MATCH}, "children"),
+    Output({"type": "sample-select", "method": MATCH}, "options"),
+    Output({"type": "sample-select", "method": MATCH}, "value"),
     Output({"type": "poll-interval", "method": MATCH}, "disabled", allow_duplicate=True),
     Input({"type": "poll-interval", "method": MATCH}, "n_intervals"),
+    Input({"type": "sample-select", "method": MATCH}, "value"),
+    Input({"type": "n-train", "method": MATCH}, "value"),
+    Input({"type": "n-points", "method": MATCH}, "value"),
+    Input({"type": "n-modes", "method": MATCH}, "value"),
     State({"type": "poll-interval", "method": MATCH}, "id"),
     prevent_initial_call=True,
 )
-def refresh_training(_: int, interval_id: dict):
+def refresh_training(
+    _: int,
+    selected_sample: int | None,
+    n_train_slider: int,
+    n_points_slider: int,
+    n_modes_slider: int,
+    interval_id: dict,
+):
     """Refresh plots and status while training."""
     method_id = interval_id["method"]
     payload = _read_history(method_id)
     history = payload.get("history", [])
-    example = payload.get("example")
     metrics = payload.get("metrics")
+    cfg = payload.get("config", {})
+
+    n_train = int(n_train_slider or cfg.get("n_train", 0))
+    n_points = int(n_points_slider or cfg.get("n_points", 64))
+    n_modes = int(n_modes_slider or cfg.get("n_modes", 6))
+    sample_options = [{"label": f"Sample {i}", "value": i} for i in range(n_train)]
+    if n_train <= 0:
+        selected_sample = 0
+    elif selected_sample is None or selected_sample < 0 or selected_sample >= n_train:
+        selected_sample = 0
+
     total_epochs = max(int(payload.get("total_epochs", 1)), 1)
     current_epoch = int(payload.get("current_epoch", 0))
     progress = int(100 * current_epoch / total_epochs)
@@ -776,7 +982,8 @@ def refresh_training(_: int, interval_id: dict):
         status_text = f"Training on GPU. Epoch {current_epoch} / {total_epochs}"
         disabled = False
     elif status == "complete":
-        status_text = f"Training complete. Relative L2 error = {metrics['relative_l2']:.3e}"
+        early_msg = " (early stopped)" if payload.get("stopped_early") else ""
+        status_text = f"Training complete{early_msg}. Relative L2 error = {metrics['relative_l2']:.3e}"
         disabled = True
     elif status == "error":
         status_text = f"Training error: {payload.get('error', 'unknown error')}"
@@ -785,19 +992,87 @@ def refresh_training(_: int, interval_id: dict):
         status_text = "Idle."
         disabled = True
 
+    forcing_fig = _forcing_fig(payload.get("example"))
+    solution_fig = _solution_fig(payload.get("example"))
+    error_fig = _error_fig(payload.get("example"))
+    train_points_fig = _training_points_fig(None)
+
+    if n_train > 0:
+        train_data = make_dataset(n_samples=n_train, n_points=n_points, n_modes=n_modes, seed=7)
+        x_vals = train_data["x"][0, :, 0].detach().cpu().tolist()
+        forcing_matrix = train_data["forcing"].detach().cpu().tolist()
+        forcing_fig = _forcing_overlay_fig({"x": x_vals, "forcings": forcing_matrix}, highlight_idx=selected_sample)
+        train_points_fig = _training_points_fig(x_vals)
+        sample_data = {
+            "x": train_data["x"][selected_sample, :, 0].detach().cpu().tolist(),
+            "target": train_data["solution"][selected_sample].detach().cpu().tolist(),
+            "prediction": None,
+        }
+        solution_fig = _solution_fig(sample_data)
+        error_fig = _error_fig(sample_data)
+
+        if status == "complete":
+            best_meta_path = payload.get("best_metadata_path")
+            if best_meta_path and Path(best_meta_path).exists():
+                try:
+                    with open(best_meta_path) as stream:
+                        best_meta = json.load(stream)
+                    forcing_sel = train_data["forcing"][selected_sample].to(device)
+                    x_sel = train_data["x"][selected_sample, :, 0].to(device)
+                    target_sel = train_data["solution"][selected_sample].to(device)
+                    if method_id == "deeponet":
+                        model = DeepONet(n_sensors=n_points).to(device)
+                        model.load_state_dict(torch.load(best_meta["weights_path"], map_location=device))
+                        pred_sel = _predict_deeponet_single(model, forcing_sel, x_sel).detach().cpu()
+                    else:
+                        model = FNO1d(input_dim=2, width=32, modes=min(12, max(4, n_points // 4)), depth=4).to(device)
+                        model.load_state_dict(torch.load(best_meta["weights_path"], map_location=device))
+                        pred_sel = _predict_fno_single(model, forcing_sel, x_sel).detach().cpu()
+                    sample_data = {
+                        "x": x_sel.detach().cpu().tolist(),
+                        "target": target_sel.detach().cpu().tolist(),
+                        "prediction": pred_sel.tolist(),
+                    }
+                    solution_fig = _solution_fig(sample_data)
+                    error_fig = _error_fig(sample_data)
+                    sample_metrics = summarize_prediction(
+                        pred_sel.unsqueeze(0),
+                        target_sel.detach().cpu().unsqueeze(0),
+                    )
+                except Exception:
+                    sample_metrics = None
+            else:
+                sample_metrics = None
+        else:
+            sample_metrics = None
+    else:
+        sample_metrics = None
+
     metrics_card = html.Div(
         [
             html.Div("Run Summary", className="section-header"),
             html.Div(f"Status: {status_text}", className="metric-line"),
-            html.Div(f"Train samples: {payload.get('config', {}).get('n_train', '-')}", className="metric-line"),
-            html.Div(f"Grid points: {payload.get('config', {}).get('n_points', '-')}", className="metric-line"),
-            html.Div(f"Modes: {payload.get('config', {}).get('n_modes', '-')}", className="metric-line"),
+            html.Div(f"Train samples: {cfg.get('n_train', '-')}", className="metric-line"),
+            html.Div(f"Grid points: {cfg.get('n_points', '-')}", className="metric-line"),
+            html.Div(f"Modes: {cfg.get('n_modes', '-')}", className="metric-line"),
+            html.Div(f"Preview n_train: {n_train}", className="metric-line"),
+            html.Div(f"Preview n_points: {n_points}", className="metric-line"),
+            html.Div(f"Preview n_modes: {n_modes}", className="metric-line"),
+            html.Div(f"Selected sample: {selected_sample}", className="metric-line"),
             html.Div(
                 f"Test MSE: {metrics['mse']:.3e}" if metrics else "Test MSE: -",
                 className="metric-line",
             ),
             html.Div(
                 f"Relative L2: {metrics['relative_l2']:.3e}" if metrics else "Relative L2: -",
+                className="metric-line",
+            ),
+            html.Div(
+                f"Selected MSE: {sample_metrics['mse']:.3e}" if sample_metrics else "Selected MSE: -",
+                className="metric-line",
+            ),
+            html.Div(
+                f"Selected Relative L2: {sample_metrics['relative_l2']:.3e}" if sample_metrics else "Selected Relative L2: -",
                 className="metric-line",
             ),
         ],
@@ -808,10 +1083,13 @@ def refresh_training(_: int, interval_id: dict):
         progress,
         status_text,
         _loss_fig(history),
-        _forcing_fig(example),
-        _solution_fig(example),
-        _error_fig(example),
+        forcing_fig,
+        solution_fig,
+        error_fig,
+        train_points_fig,
         metrics_card,
+        sample_options,
+        selected_sample,
         disabled,
     )
 
@@ -821,8 +1099,11 @@ def refresh_training(_: int, interval_id: dict):
     Output({"type": "forcing-plot", "method": MATCH}, "figure", allow_duplicate=True),
     Output({"type": "solution-plot", "method": MATCH}, "figure", allow_duplicate=True),
     Output({"type": "error-plot", "method": MATCH}, "figure", allow_duplicate=True),
+    Output({"type": "train-points-plot", "method": MATCH}, "figure", allow_duplicate=True),
     Output({"type": "metrics-card", "method": MATCH}, "children", allow_duplicate=True),
     Output({"type": "train-progress", "method": MATCH}, "value", allow_duplicate=True),
+    Output({"type": "sample-select", "method": MATCH}, "options", allow_duplicate=True),
+    Output({"type": "sample-select", "method": MATCH}, "value", allow_duplicate=True),
     Input({"type": "clear-btn", "method": MATCH}, "n_clicks"),
     prevent_initial_call=True,
 )
@@ -833,7 +1114,10 @@ def clear_figures(_: int):
         _forcing_fig(None),
         _solution_fig(None),
         _error_fig(None),
+        _training_points_fig(None),
         html.Div("No run data yet.", className="plot-card p-3"),
+        0,
+        [],
         0,
     )
 
@@ -843,13 +1127,22 @@ def clear_figures(_: int):
     Output("eval-model-select", "value"),
     Output("eval-model-status", "children"),
     Input("eval-refresh-models-btn", "n_clicks"),
+    Input("eval-delete-models-btn", "n_clicks"),
     Input({"type": "train-status", "method": "deeponet"}, "children"),
     State("eval-model-select", "value"),
 )
-def refresh_eval_models(_: int, __: str, current_value: str | None):
+def refresh_eval_models(_: int, delete_clicks: int, __: str, current_value: str | None):
     """Refresh DeepONet model list for evaluation tab."""
+    ctx = dash.callback_context
+    if ctx.triggered_id == "eval-delete-models-btn":
+        for run_dir in DEEPNET_WEIGHTS_DIR.glob("deeponet_*"):
+            if run_dir.is_dir():
+                shutil.rmtree(run_dir, ignore_errors=True)
+
     options = _list_deeponet_models()
     if not options:
+        if ctx.triggered_id == "eval-delete-models-btn":
+            return [], None, "Deleted all saved DeepONet models."
         return [], None, "No saved DeepONet models found. Train a DeepONet run first."
 
     option_values = {opt["value"] for opt in options}

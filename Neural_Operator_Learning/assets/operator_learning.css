@@ -112,3 +112,56 @@ input[type="number"] {
     border-color: #2a3555 !important;
     color: #e8eaf0 !important;
 }
+
+/* Dash Dropdown readability on light controls */
+.dash-dropdown,
+.dash-dropdown-wrapper,
+.dash-dropdown-content {
+    background-color: #f2f5fc !important;
+    color: #162033 !important;
+    border-radius: 6px !important;
+}
+
+.dash-dropdown {
+    border: 1px solid #7f92b8 !important;
+}
+
+.dash-dropdown-value,
+.dash-dropdown-value-item {
+    color: #162033 !important;
+    font-weight: 500;
+}
+
+.dash-dropdown-placeholder {
+    color: #5f6f8d !important;
+}
+
+.dash-dropdown-trigger-icon,
+.dash-dropdown-search-icon,
+.dash-dropdown-clear,
+.dash-dropdown-action-button {
+    color: #253552 !important;
+}
+
+.dash-dropdown-options {
+    background-color: #f8faff !important;
+    border: 1px solid #7f92b8 !important;
+    border-radius: 6px !important;
+}
+
+.dash-dropdown-option {
+    color: #162033 !important;
+    background-color: #f8faff !important;
+}
+
+.dash-dropdown-option:hover {
+    background-color: #dce8ff !important;
+    color: #0f172a !important;
+}
+
+.dash-dropdown-option[aria-selected="true"],
+.dash-dropdown-option.selected {
+    background-color: #cbdcfb !important;
+    color: #0f172a !important;
+    font-weight: 600;
+}

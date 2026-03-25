@@ -122,7 +122,12 @@ def train_deeponet(
     learning_rate: float = 1e-3,
     batch_size: int = 1024,
     log_interval: int = 25,
-    callback: Callable[[int, float], None] | None = None,
+    callback: Callable[[int, float, float | None, float], None] | None = None,
+    val_loss_fn: Callable[[], float] | None = None,
+    early_stopping_patience: int = 0,
+    lr_scheduler_patience: int = 0,
+    lr_scheduler_factor: float = 0.5,
+    min_lr: float = 1e-6,
 ) -> list[dict[str, float]]:
     """Train DeepONet on pointwise pairs."""
     forcing = train_data["forcing"].to(device)
@@ -138,6 +143,17 @@ def train_deeponet(
     loss_fn = nn.MSELoss()
     history: list[dict[str, float]] = []
     n_total = forcing_pairs.shape[0]
+    scheduler = None
+    if val_loss_fn is not None and lr_scheduler_patience > 0:
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=lr_scheduler_factor,
+            patience=lr_scheduler_patience,
+            min_lr=min_lr,
+        )
+    best_metric = float("inf")
+    no_improve_count = 0
 
     model.train()
     for epoch in range(1, epochs + 1):
@@ -158,11 +174,29 @@ def train_deeponet(
             epoch_loss += float(loss.detach().item()) * forcing_batch.size(0)
 
         avg_loss = epoch_loss / max(n_total, 1)
+        val_loss = None
+        monitor_metric = avg_loss
+        if val_loss_fn is not None:
+            val_loss = float(val_loss_fn())
+            monitor_metric = val_loss
+        if scheduler is not None:
+            scheduler.step(monitor_metric)
+        if monitor_metric < best_metric - 1e-12:
+            best_metric = monitor_metric
+            no_improve_count = 0
+        else:
+            no_improve_count += 1
+        current_lr = float(optimizer.param_groups[0]["lr"])
+
         if _epoch_log(epoch, epochs, log_interval):
-            record = {"epoch": float(epoch), "train_loss": avg_loss}
+            record = {"epoch": float(epoch), "train_loss": avg_loss, "lr": current_lr}
+            if val_loss is not None:
+                record["val_loss"] = val_loss
             history.append(record)
             if callback is not None:
-                callback(epoch, avg_loss)
+                callback(epoch, avg_loss, val_loss, current_lr)
+        if early_stopping_patience > 0 and no_improve_count >= early_stopping_patience:
+            break
 
     return history
 
@@ -194,7 +228,12 @@ def train_fno(
     learning_rate: float = 1e-3,
     batch_size: int = 32,
     log_interval: int = 25,
-    callback: Callable[[int, float], None] | None = None,
+    callback: Callable[[int, float, float | None, float], None] | None = None,
+    val_loss_fn: Callable[[], float] | None = None,
+    early_stopping_patience: int = 0,
+    lr_scheduler_patience: int = 0,
+    lr_scheduler_factor: float = 0.5,
+    min_lr: float = 1e-6,
 ) -> list[dict[str, float]]:
     """Train an FNO on full function batches."""
     forcing = train_data["forcing"].to(device)
@@ -206,6 +245,17 @@ def train_fno(
     loss_fn = nn.MSELoss()
     history: list[dict[str, float]] = []
     n_total = inputs.shape[0]
+    scheduler = None
+    if val_loss_fn is not None and lr_scheduler_patience > 0:
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=lr_scheduler_factor,
+            patience=lr_scheduler_patience,
+            min_lr=min_lr,
+        )
+    best_metric = float("inf")
+    no_improve_count = 0
 
     model.train()
     for epoch in range(1, epochs + 1):
@@ -225,11 +275,29 @@ def train_fno(
             epoch_loss += float(loss.detach().item()) * input_batch.size(0)
 
         avg_loss = epoch_loss / max(n_total, 1)
+        val_loss = None
+        monitor_metric = avg_loss
+        if val_loss_fn is not None:
+            val_loss = float(val_loss_fn())
+            monitor_metric = val_loss
+        if scheduler is not None:
+            scheduler.step(monitor_metric)
+        if monitor_metric < best_metric - 1e-12:
+            best_metric = monitor_metric
+            no_improve_count = 0
+        else:
+            no_improve_count += 1
+        current_lr = float(optimizer.param_groups[0]["lr"])
+
         if _epoch_log(epoch, epochs, log_interval):
-            record = {"epoch": float(epoch), "train_loss": avg_loss}
+            record = {"epoch": float(epoch), "train_loss": avg_loss, "lr": current_lr}
+            if val_loss is not None:
+                record["val_loss"] = val_loss
             history.append(record)
             if callback is not None:
-                callback(epoch, avg_loss)
+                callback(epoch, avg_loss, val_loss, current_lr)
+        if early_stopping_patience > 0 and no_improve_count >= early_stopping_patience:
+            break
 
     return history
 

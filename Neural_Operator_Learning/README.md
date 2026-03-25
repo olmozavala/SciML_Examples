@@ -55,3 +55,7 @@ uv run operator_dash_app.py
 - The same Poisson operator is used in both scripts so the comparison focuses on architecture rather than on different datasets.
 - A CUDA-capable GPU is required; the scripts intentionally fail fast instead of silently falling back to CPU.
 - During DeepONet dashboard training, the best checkpoint by validation MSE is saved in `weights/deeponet/<run_name>/best_model.pt` with metadata in `best_model.json`.
+- Dashboard training uses multiple forcing functions (`n_train` samples), not a single forcing.
+- The DeepONet Evaluation tab uses additional forcing profiles that are separate from the training/validation/test seeds.
+- Dashboard training now includes early stopping (`patience=30`) and learning-rate reduction on validation plateau.
+- Changing `Grid Points` or `Sine Modes` in the training tabs updates the forcing overlay and training-point-location plots immediately.
