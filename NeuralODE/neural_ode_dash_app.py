@@ -389,22 +389,14 @@ def _status_badge(status: str, extra: str = "") -> html.Span:
 )
 def update_plots(n_intervals, clear_clicks, noise_std, task):
     ctx = dash.callback_context
-    # No strict trigger guard here to allow initial render on page load
+    # In a MATCH callback, we can extract the method_id from the Output component
+    # This works even on initial load when ctx.triggered is empty.
+    try:
+        method_id = ctx.outputs_list[0]['id']['method']
+    except (IndexError, KeyError):
+        method_id = None
     
-    method_id = None
-    if ctx.triggered:
-        prop_id = ctx.triggered[0]["prop_id"]
-        if "." in prop_id:
-            try:
-                method_id = json.loads(prop_id.split(".")[0])["method"]
-            except: pass
-
-    # If we couldn't get method_id from trigger (initial load), we use a safe default or 
-    # handle it. In Dash, MATCH callbacks can be tricky on initial load.
-    # But for Neural ODE, we can just look at the component that triggered it.
-    
-    # We'll read the history for the current MATCH method_id (automatic in Dash)
-    data = _read_loss_history(None) # Match handles the ID context
+    data = _read_loss_history(method_id)
     history = data.get("history", [])
 
     loss_fig = _empty_fig()
