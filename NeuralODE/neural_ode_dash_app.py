@@ -71,7 +71,7 @@ def _empty_fig(title: str = "") -> go.Figure:
     )
     return fig
 
-def _apply_dark_layout(fig: go.Figure, title: str = "", xaxis_title: str = "", yaxis_title: str = "") -> None:
+def _apply_dark_layout(fig: go.Figure, title: str = "", xaxis_title: str = "", yaxis_title: str = "", equal_aspect: bool = False) -> None:
     fig.update_layout(
         template=PLOTLY_TEMPLATE,
         title=dict(text=title, font=dict(size=13, color="#c0d0f0")),
@@ -83,6 +83,8 @@ def _apply_dark_layout(fig: go.Figure, title: str = "", xaxis_title: str = "", y
         yaxis_title=yaxis_title,
         legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(size=10)),
     )
+    if equal_aspect:
+        fig.update_yaxes(scaleanchor="x", scaleratio=1)
 
 # ── Training backend (file I/O helpers imported from train_worker) ────────────
 from train_worker import _path as _get_loss_history_path, _write as _write_loss_history, _read as _read_loss_history
@@ -479,7 +481,7 @@ def update_plots(n_intervals, clear_clicks, noise_std, task):
             marker=dict(color=colors, size=6, opacity=0.8),
             mode="markers", name="Data",
         ))
-        _apply_dark_layout(pred_fig, title, "x1", "x2")
+        _apply_dark_layout(pred_fig, title, "x1", "x2", equal_aspect=True)
 
     return loss_fig, pred_fig
 
@@ -567,7 +569,7 @@ def update_node_compare_plot(weights_path: str | None, task: str | None):
             ))
             ep = meta.get("epochs", "?")
             loss = meta.get("final_loss", 0)
-            _apply_dark_layout(fig, f"Spiral — {solver}  |  ep={ep}  loss={loss:.4f}", "x1", "x2")
+            _apply_dark_layout(fig, f"Spiral — {solver}  |  ep={ep}  loss={loss:.4f}", "x1", "x2", equal_aspect=True)
 
         elif task == "classifier":
             model = NeuralODEClassifier(in_dim=2, hidden_dim=16, num_classes=1, method=solver).to(device)
@@ -587,7 +589,7 @@ def update_node_compare_plot(weights_path: str | None, task: str | None):
             ))
             ep = meta.get("epochs", "?")
             loss = meta.get("final_loss", 0)
-            _apply_dark_layout(fig, f"Classifier — {solver}  |  ep={ep}  loss={loss:.4f}", "x1", "x2")
+            _apply_dark_layout(fig, f"Classifier — {solver}  |  ep={ep}  loss={loss:.4f}", "x1", "x2", equal_aspect=True)
 
     except Exception as e:
         fig = _empty_fig(f"Error loading model: {e}")
