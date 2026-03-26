@@ -4,7 +4,8 @@ from __future__ import annotations
 import torch
 
 from operator_data import describe_dataset, make_dataset, set_seed
-from operator_models import DeepONet, predict_deeponet, require_cuda_device, summarize_prediction, train_deeponet
+from operator_models import DeepONet, predict_deeponet, require_cuda_device, summarize_prediction
+from training import train_deeponet
 
 
 device = require_cuda_device()

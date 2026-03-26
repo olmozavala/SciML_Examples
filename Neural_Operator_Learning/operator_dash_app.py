@@ -23,9 +23,9 @@ from operator_models import (
     predict_fno,
     require_cuda_device,
     summarize_prediction,
-    train_deeponet,
     train_fno,
 )
+from training import train_deeponet
 
 
 device = require_cuda_device()
@@ -145,6 +145,24 @@ def _list_deeponet_models() -> list[dict]:
                 meta = json.load(stream)
             label = (
                 f"{meta_path.parent.name} | val_mse={meta.get('best_val_mse', float('nan')):.3e} | "
+                f"n={meta.get('n_train', '-')}, p={meta.get('n_points', '-')}, m={meta.get('n_modes', '-')}"
+            )
+            options.append({"label": label, "value": str(meta_path)})
+        except (json.JSONDecodeError, OSError, ValueError):
+            continue
+    return options
+
+
+def _list_fno_models() -> list[dict]:
+    """List available saved FNO checkpoints (newest first)."""
+    metadata_files = sorted(FNO_WEIGHTS_DIR.glob("fno_*/final_model.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    options = []
+    for meta_path in metadata_files:
+        try:
+            with open(meta_path) as stream:
+                meta = json.load(stream)
+            label = (
+                f"{meta_path.parent.name} | "
                 f"n={meta.get('n_train', '-')}, p={meta.get('n_points', '-')}, m={meta.get('n_modes', '-')}"
             )
             options.append({"label": label, "value": str(meta_path)})
@@ -613,6 +631,90 @@ def _deeponet_evaluation_tab() -> dbc.Container:
     )
 
 
+def _fno_evaluation_tab() -> dbc.Container:
+    """FNO model evaluation tab layout."""
+    return dbc.Container(
+        [
+            dbc.Row(
+                [
+                    dbc.Col(
+                        html.Div(
+                            [
+                                html.Div("Model Selection", className="section-header"),
+                                dcc.Dropdown(
+                                    id="fno-eval-model-select",
+                                    options=[],
+                                    value=None,
+                                    placeholder="Select a saved FNO model",
+                                    style={"marginBottom": "8px"},
+                                ),
+                                dbc.Button(
+                                    "Refresh Models",
+                                    id="fno-eval-refresh-models-btn",
+                                    n_clicks=0,
+                                    color="secondary",
+                                    outline=True,
+                                    className="w-100",
+                                ),
+                                dbc.Button(
+                                    "Delete All Models",
+                                    id="fno-eval-delete-models-btn",
+                                    n_clicks=0,
+                                    color="danger",
+                                    outline=True,
+                                    className="w-100 mt-2",
+                                ),
+                                html.Div(id="fno-eval-model-status", className="status-panel mt-2"),
+                                html.Hr(style={"borderColor": "#2a3555", "margin": "12px 0"}),
+                                html.Div("Input Forcing", className="section-header"),
+                                dcc.Dropdown(
+                                    id="fno-eval-forcing-select",
+                                    options=[{"label": label, "value": value} for value, label in FORCING_PROFILES],
+                                    value="mode1",
+                                    clearable=False,
+                                    style={"marginBottom": "10px"},
+                                ),
+                                dbc.Button(
+                                    "Run Evaluation",
+                                    id="fno-eval-run-btn",
+                                    n_clicks=0,
+                                    color="primary",
+                                    className="w-100 btn-train",
+                                ),
+                                html.Div(id="fno-eval-run-status", className="status-panel mt-2"),
+                                html.Hr(style={"borderColor": "#2a3555", "margin": "12px 0"}),
+                                html.Div(id="fno-eval-metrics-card", className="plot-card p-3"),
+                            ],
+                            className="operator-sidebar p-3",
+                        ),
+                        width=3,
+                        style={"minWidth": "290px"},
+                    ),
+                    dbc.Col(
+                        [
+                            dbc.Row(
+                                [
+                                    dbc.Col(_plot_card("Selected Forcing", "fno-eval-forcing-plot"), width=6),
+                                    dbc.Col(_plot_card("Prediction vs Exact", "fno-eval-solution-plot"), width=6),
+                                ]
+                            ),
+                            dbc.Row(
+                                [
+                                    dbc.Col(_plot_card("Pointwise Error", "fno-eval-error-plot"), width=12),
+                                ]
+                            ),
+                        ],
+                        width=9,
+                    ),
+                ],
+                className="mt-2 g-3",
+            )
+        ],
+        fluid=True,
+        className="mt-3",
+    )
+
+
 THEORY_MARKDOWN = r"""
 ### Neural Operators
 
@@ -674,6 +776,11 @@ app.layout = html.Div(
                         label="DeepONet Evaluation",
                         tab_id="deeponet-eval",
                         children=[_deeponet_evaluation_tab()],
+                    ),
+                    dbc.Tab(
+                        label="FNO Evaluation",
+                        tab_id="fno-eval",
+                        children=[_fno_evaluation_tab()],
                     ),
                     dbc.Tab(
                         label="Theory",
@@ -1195,6 +1302,104 @@ def run_deeponet_evaluation(_: int, selected_metadata_path: str | None, forcing_
             "forcing": case["forcing"],
             "target": target[0].tolist(),
             "prediction": prediction[0].tolist(),
+        }
+        metrics_card = html.Div(
+            [
+                html.Div("Evaluation Summary", className="section-header"),
+                html.Div(f"Model: {Path(selected_metadata_path).parent.name}", className="metric-line"),
+                html.Div(f"Profile: {forcing_profile}", className="metric-line"),
+                html.Div(f"MSE: {metrics['mse']:.3e}", className="metric-line"),
+                html.Div(f"Relative L2: {metrics['relative_l2']:.3e}", className="metric-line"),
+                html.Div(f"Grid points: {n_points}", className="metric-line"),
+                html.Div(f"Sine modes: {n_modes}", className="metric-line"),
+            ],
+            className="plot-card p-3",
+        )
+        return (
+            _forcing_fig(example),
+            _solution_fig(example),
+            _error_fig(example),
+            metrics_card,
+            "Evaluation complete.",
+        )
+    except Exception as exc:
+        return (
+            _forcing_fig(None),
+            _solution_fig(None),
+            _error_fig(None),
+            html.Div("Evaluation failed.", className="plot-card p-3"),
+            f"Evaluation error: {exc}",
+        )
+
+
+@callback(
+    Output("fno-eval-model-select", "options"),
+    Output("fno-eval-model-select", "value"),
+    Output("fno-eval-model-status", "children"),
+    Input("fno-eval-refresh-models-btn", "n_clicks"),
+    Input("fno-eval-delete-models-btn", "n_clicks"),
+    Input({"type": "train-status", "method": "fno"}, "children"),
+    State("fno-eval-model-select", "value"),
+)
+def refresh_fno_eval_models(_: int, __: int, ___: str, current_value: str | None):
+    """Refresh FNO model list for evaluation tab."""
+    ctx = dash.callback_context
+    if ctx.triggered_id == "fno-eval-delete-models-btn":
+        for run_dir in FNO_WEIGHTS_DIR.glob("fno_*"):
+            if run_dir.is_dir():
+                shutil.rmtree(run_dir, ignore_errors=True)
+
+    options = _list_fno_models()
+    if not options:
+        if ctx.triggered_id == "fno-eval-delete-models-btn":
+            return [], None, "Deleted all saved FNO models."
+        return [], None, "No saved FNO models found. Train an FNO run first."
+
+    option_values = {opt["value"] for opt in options}
+    selected = current_value if current_value in option_values else options[0]["value"]
+    return options, selected, f"Loaded {len(options)} saved model(s)."
+
+
+@callback(
+    Output("fno-eval-forcing-plot", "figure"),
+    Output("fno-eval-solution-plot", "figure"),
+    Output("fno-eval-error-plot", "figure"),
+    Output("fno-eval-metrics-card", "children"),
+    Output("fno-eval-run-status", "children"),
+    Input("fno-eval-run-btn", "n_clicks"),
+    State("fno-eval-model-select", "value"),
+    State("fno-eval-forcing-select", "value"),
+    prevent_initial_call=True,
+)
+def run_fno_evaluation(_: int, selected_metadata_path: str | None, forcing_profile: str):
+    """Run selected FNO checkpoint on a chosen forcing profile."""
+    if not selected_metadata_path:
+        raise PreventUpdate
+
+    try:
+        with open(selected_metadata_path) as stream:
+            metadata = json.load(stream)
+        weights_path = Path(metadata["weights_path"])
+        if not weights_path.exists():
+            raise FileNotFoundError(f"Missing weights file: {weights_path}")
+
+        n_points = int(metadata.get("n_points", 64))
+        n_modes = int(metadata.get("n_modes", 6))
+        case = _build_evaluation_case(forcing_profile, n_points, n_modes)
+
+        model = FNO1d(input_dim=2, width=32, modes=min(12, max(4, n_points // 4)), depth=4).to(device)
+        model.load_state_dict(torch.load(weights_path, map_location=device))
+        forcing = torch.tensor(case["forcing"], dtype=torch.float32).to(device)
+        x_grid = torch.tensor(case["x"], dtype=torch.float32).to(device)
+        target = torch.tensor(case["target"], dtype=torch.float32)
+        prediction = _predict_fno_single(model, forcing, x_grid).detach().cpu()
+        metrics = summarize_prediction(prediction.unsqueeze(0), target.unsqueeze(0))
+
+        example = {
+            "x": case["x"],
+            "forcing": case["forcing"],
+            "target": target.tolist(),
+            "prediction": prediction.tolist(),
         }
         metrics_card = html.Div(
             [
