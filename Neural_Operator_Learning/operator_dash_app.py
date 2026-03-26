@@ -212,6 +212,9 @@ def _predict_deeponet_single(model: DeepONet, forcing: torch.Tensor, x: torch.Te
     """Predict one full field for one forcing profile."""
     model.eval()
     n_points = x.shape[0]
+    # To predict the entire solution field in one pass, we repeat the forcing function
+    # for each spatial coordinate in x. The branch network sees the same context 
+    # while the trunk network evaluates each unique position.
     forcing_batch = forcing.reshape(1, -1).repeat(n_points, 1)
     x_query = x.reshape(-1, 1)
     return model(forcing_batch, x_query).squeeze(-1)
